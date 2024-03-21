@@ -2,6 +2,10 @@
 
 Post quantum cryptography message broker.
 
+[![Rust](https://github.com/bartossh/quantum/actions/workflows/rust.yml/badge.svg)](https://github.com/bartossh/quantum/actions/workflows/rust.yml)
+
+![Quantum Logo](https://github.com/bartossh/quantum/blob/main/assets/quantum.png)
+
 ## IT IS STILL A PROTOTYPE
 
 WORK IN PROGRESS. KEEP YOUR EXPECTATIONS LOW.

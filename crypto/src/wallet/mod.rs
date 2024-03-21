@@ -70,8 +70,6 @@ impl Wallet {
 
 #[cfg(test)]
 mod tests {
-    use criterion::measurement::ValueFormatter;
-
     use super::*;
     struct MockAsVectorBytes {
         inner: Vec<u8>,
@@ -100,7 +98,7 @@ mod tests {
             let ds = w.sign(&mock);
             assert_eq!(ds.len(), 49856);
 
-            if let Err(e) = w.validate_self(&mock, ds) {
+            if let Err(_) = w.validate_self(&mock, ds) {
                 assert_eq!(false, true);
             };
         }
