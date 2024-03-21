@@ -1,0 +1,24 @@
+[package]
+name = "crypto"
+version = "0.1.0"
+edition = "2021"
+
+[dev-dependencies]
+criterion = "0.5.1"
+
+[[bench]]
+name = "benchmarks"
+harness = false
+
+[dependencies]
+pqcrypto = "0.17.0"
+chrono = "*"
+pqcrypto-traits = "0.3.5"
+zerocopy = "0.7.32"
+crypto-hashes = "0.10.0"
+time = "0.3.34"
+bs58 = "0.5.1"
+
+[profile.test]
+# Enable optimizations for tests
+opt-level = 3
