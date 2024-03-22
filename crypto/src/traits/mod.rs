@@ -20,3 +20,16 @@ pub trait Verifier {
         address: &str,
     ) -> Result<(), VerificationError>;
 }
+
+/// Errors describing EncryptDecrypter failures.
+#[derive(Debug)]
+pub enum ErrorEncryptDecrypt {
+    InvalidPublicKey,
+    InvalidCipher,
+}
+
+/// EncryptDecrypter generates shared key and encrypts and decrypts the shared key.
+pub trait EncapsulatorDecapsulator {
+    fn encapsulate_shared_key(&self, pk: &[u8]) -> Result<(Vec<u8>, Vec<u8>), ErrorEncryptDecrypt>;
+    fn decapsulate_shared_key(&self, cipher: &[u8]) -> Result<Vec<u8>, ErrorEncryptDecrypt>;
+}
