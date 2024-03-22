@@ -64,18 +64,12 @@ To build project use `make` command:
 
 ### Unit test
 
-To unit test single component for example `crypto`:
-
 ```sh
-cd crypto
 cargo test --profile test -v -- --nocapture --test-threads=1
 ```
 
 ### Benchmarking
 
-To benchmark single component for example `crypto`:
-
 ```sh
-cd crypto
 cargo bench 
 ```
