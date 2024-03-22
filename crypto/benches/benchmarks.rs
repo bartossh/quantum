@@ -1,5 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use crypto::traits::Signer;
+use crypto::asymetric_cipher::*;
+use crypto::traits::{EncapsulatorDecapsulator, Signer};
 use crypto::transaction::*;
 use crypto::wallet::*;
 
@@ -86,11 +87,34 @@ fn benchmark_transaction_validate_receiver(c: &mut Criterion) {
     });
 }
 
+fn benchmark_asymmetric_key_encapsulation(c: &mut Criterion) {
+    c.bench_function("benchmark_transaction_validate_receiver", |b| {
+        let encrypter = SharedKeyGeneratorWallet::new();
+        let decrypter: SharedKeyGeneratorWallet = SharedKeyGeneratorWallet::new();
+
+        b.iter(|| encrypter.encapsulate_shared_key(&decrypter.public_key()));
+    });
+}
+
+fn benchmark_asymmetric_key_decapsulation(c: &mut Criterion) {
+    c.bench_function("benchmark_transaction_validate_receiver", |b| {
+        let encrypter = SharedKeyGeneratorWallet::new();
+        let decrypter: SharedKeyGeneratorWallet = SharedKeyGeneratorWallet::new();
+        let (_sk, ct) = encrypter
+            .encapsulate_shared_key(&decrypter.public_key())
+            .unwrap();
+
+        b.iter(|| decrypter.decapsulate_shared_key(&ct));
+    });
+}
+
 criterion_group!(
     benches,
     benchmark_transaction_issue,
     benchmark_transaction_approve,
     benchmark_transaction_validate_issuer,
-    benchmark_transaction_validate_receiver
+    benchmark_transaction_validate_receiver,
+    benchmark_asymmetric_key_encapsulation,
+    benchmark_asymmetric_key_decapsulation
 );
 criterion_main!(benches);
