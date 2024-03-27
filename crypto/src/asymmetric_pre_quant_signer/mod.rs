@@ -9,7 +9,6 @@ use sha2::Sha512;
 const VERSION: &'static [u8; 2] = b"01";
 
 /// CONTEXT explained.
-/// If you want, you can optionally pass a “context”.
 /// It is generally a good idea to choose a context and try to make it unique to your project and this specific usage of signatures.
 /// For example, without this, if you were to convert your OpenPGP key to a Bitcoin key
 /// (just as an example, and also Don’t Ever Do That) and someone tricked you into signing an “email” which was actually a Bitcoin transaction moving all your magic internet money to their address, it’d be a valid transaction.

@@ -391,8 +391,8 @@ mod tests {
             receiver.address(),
         );
 
-        let ten_millis = time::Duration::from_millis(10);
-        thread::sleep(ten_millis);
+        let hundred_millis = time::Duration::from_millis(100);
+        thread::sleep(hundred_millis);
         trx.created_at = Instant::now().elapsed().as_nanos();
 
         for _ in 0..rounds {

@@ -60,6 +60,7 @@ impl EncapsulatorDecapsulator for SharedKeyGeneratorWallet {
 }
 
 impl AddressReader for SharedKeyGeneratorWallet {
+    #[inline]
     fn address(&self) -> String {
         let mut buf: Vec<u8> = Vec::new();
         buf.extend(VERSION.to_vec());
@@ -79,7 +80,7 @@ mod tests {
         let decrypter: SharedKeyGeneratorWallet = SharedKeyGeneratorWallet::new();
         for _ in 0..5 {
             let cipher = encrypter.encapsulate_shared_key(decrypter.address());
-            if let Ok(ct) = cipher {
+            if let Ok(_) = cipher {
             } else {
                 assert_eq!(false, true);
             }

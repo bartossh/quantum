@@ -1,7 +1,9 @@
 use criterion::{criterion_group, criterion_main, Criterion};
+use crypto::asymmetric_pre_quant_cipher::CipherWallet;
 use crypto::asymmetric_quant_cipher::*;
 use crypto::asymmetric_quant_signer::*;
-use crypto::globals::{AddressReader as _, EncapsulatorDecapsulator, Signer as _};
+use crypto::globals::EncryptorDecryptor;
+use crypto::globals::{AddressReader as _, EncapsulatorDecapsulator};
 use crypto::transaction::*;
 
 fn benchmark_transaction_issue(c: &mut Criterion) {
@@ -71,7 +73,7 @@ fn benchmark_transaction_validate_receiver(c: &mut Criterion) {
 }
 
 fn benchmark_asymmetric_key_encapsulation(c: &mut Criterion) {
-    c.bench_function("benchmark_transaction_validate_receiver", |b| {
+    c.bench_function("benchmark_asymmetric_key_encapsulation", |b| {
         let encrypter = SharedKeyGeneratorWallet::new();
         let decrypter: SharedKeyGeneratorWallet = SharedKeyGeneratorWallet::new();
 
@@ -80,14 +82,37 @@ fn benchmark_asymmetric_key_encapsulation(c: &mut Criterion) {
 }
 
 fn benchmark_asymmetric_key_decapsulation(c: &mut Criterion) {
-    c.bench_function("benchmark_transaction_validate_receiver", |b| {
+    c.bench_function("benchmark_asymmetric_key_decapsulation", |b| {
         let encrypter = SharedKeyGeneratorWallet::new();
         let decrypter: SharedKeyGeneratorWallet = SharedKeyGeneratorWallet::new();
-        let (_sk, ct) = encrypter
+        let (_, ciphertext) = encrypter
             .encapsulate_shared_key(decrypter.address())
             .unwrap();
+        b.iter(|| decrypter.decapsulate_shared_key(&ciphertext));
+    });
+}
 
-        b.iter(|| decrypter.decapsulate_shared_key(&ct));
+fn benchmark_asymmetric_key_encryption(c: &mut Criterion) {
+    c.bench_function("benchmark_asymmetric_key_encryption", |b| {
+        let encrypter = CipherWallet::new().unwrap();
+        let decrypter = CipherWallet::new().unwrap();
+        let msg: &[u8] = "this is example message to encrypt".as_bytes();
+
+        b.iter(|| encrypter.encrypt(decrypter.address(), msg));
+    });
+}
+
+fn benchmark_asymmetric_key_decryption(c: &mut Criterion) {
+    c.bench_function("benchmark_asymmetric_key_decryption", |b| {
+        let encrypter = CipherWallet::new().unwrap();
+        let decrypter = CipherWallet::new().unwrap();
+        let msg: &[u8] = "this is example message to encrypt".as_bytes();
+        let result = encrypter.encrypt(decrypter.address(), msg);
+        if let Ok(ciphertext) = result {
+            b.iter(|| decrypter.decrypt(&ciphertext));
+        } else {
+            assert!(false);
+        }
     });
 }
 
@@ -98,6 +123,8 @@ criterion_group!(
     benchmark_transaction_validate_issuer,
     benchmark_transaction_validate_receiver,
     benchmark_asymmetric_key_encapsulation,
-    benchmark_asymmetric_key_decapsulation
+    benchmark_asymmetric_key_decapsulation,
+    benchmark_asymmetric_key_encryption,
+    benchmark_asymmetric_key_decryption
 );
 criterion_main!(benches);
