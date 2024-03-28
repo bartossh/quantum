@@ -33,6 +33,7 @@ impl Address {
 }
 
 impl Empty for Address {
+    #[inline(always)]
     fn is_empty(&self) -> bool {
         if self.pre_quantum.len() == 0 || self.post_quantum.len() == 0 {
             return true;
@@ -42,12 +43,14 @@ impl Empty for Address {
 }
 
 impl Len for Address {
+    #[inline(always)]
     fn len(&self) -> usize {
         self.pre_quantum.len() + self.post_quantum.len()
     }
 }
 
 impl AsVectorBytes for Address {
+    #[inline(always)]
     fn as_vector_bytes(&self) -> Vec<u8> {
         let mut bytes = self.pre_quantum.as_bytes().to_vec();
         bytes.extend(self.post_quantum.as_bytes());
