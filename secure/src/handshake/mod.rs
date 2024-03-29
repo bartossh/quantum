@@ -1,10 +1,9 @@
 use crate::globals::{
     AddressReader, AsVectorBytes, EncapsulatorDecapsulator, EncryptorDecryptor, Signer, Verifier,
 };
+use crate::randomizer::random_hash;
 use digest::{Digest, OutputSizeUser};
-use rand::Rng;
 use serde::{Deserialize, Serialize};
-use sha3::Sha3_256;
 use std::collections::HashMap;
 use std::hash::Hash;
 
@@ -33,7 +32,7 @@ enum CipherSuites {
 ///  
 #[derive(Serialize, Deserialize)]
 pub struct Hello {
-    client_name: String,
+    id: [u8; 32],
     version: String,
     hash_suits: CipherSuites,
     cipher_suits_sign: CipherSuites,
@@ -43,10 +42,48 @@ pub struct Hello {
 }
 
 impl Hello {
+    fn new_request(
+        id: [u8; 32],
+        hash_suite: &[String],
+        cipher_suit_sigh: &[String],
+        cipher_suits_encapsulate: &[String],
+        q_cipher_suits_sign: &[String],
+        q_cipher_suits_encapsulate: &[String],
+    ) -> Hello {
+        Hello {
+            id,
+            version: VERSION.to_string(),
+            hash_suits: CipherSuites::List(hash_suite.to_vec()),
+            cipher_suits_sign: CipherSuites::List(cipher_suit_sigh.to_vec()),
+            cipher_suits_encapsulate: CipherSuites::List(cipher_suits_encapsulate.to_vec()),
+            q_cipher_suits_sign: CipherSuites::List(q_cipher_suits_sign.to_vec()),
+            q_cipher_suits_encapsulate: CipherSuites::List(q_cipher_suits_encapsulate.to_vec()),
+        }
+    }
+
+    fn new_response(
+        id: [u8; 32],
+        hash_suite: String,
+        cipher_suit_sigh: String,
+        cipher_suits_encapsulate: String,
+        q_cipher_suits_sign: String,
+        q_cipher_suits_encapsulate: String,
+    ) -> Hello {
+        Hello {
+            id,
+            version: VERSION.to_string(),
+            hash_suits: CipherSuites::Selected(hash_suite),
+            cipher_suits_sign: CipherSuites::Selected(cipher_suit_sigh),
+            cipher_suits_encapsulate: CipherSuites::Selected(cipher_suits_encapsulate),
+            q_cipher_suits_sign: CipherSuites::Selected(q_cipher_suits_sign),
+            q_cipher_suits_encapsulate: CipherSuites::Selected(q_cipher_suits_encapsulate),
+        }
+    }
+
     #[inline]
     fn estimated_size(&self) -> usize {
         let mut size = 0;
-        size += self.client_name.len() + self.version.len();
+        size += self.id.len() + self.version.len();
         for t in [
             &self.hash_suits,
             &self.cipher_suits_sign,
@@ -73,7 +110,7 @@ impl AsVectorBytes for Hello {
     #[inline]
     fn as_vector_bytes(&self) -> Vec<u8> {
         let mut buf: Vec<u8> = Vec::with_capacity(self.estimated_size());
-        buf.extend(self.client_name.as_bytes());
+        buf.extend(self.id);
         buf.extend(self.version.as_bytes());
         for t in [
             &self.hash_suits,
@@ -197,7 +234,7 @@ where
     ECDC: EncryptorDecryptor,
     D: Digest,
 {
-    selected_name: Option<String>,
+    id: Option<[u8; 32]>,
     selected_hasher: Option<String>,
     selected_signer: Option<String>,
     selected_q_signer: Option<String>,
@@ -222,7 +259,7 @@ where
     ///
     pub fn new() -> State<SV, ED, ECDC, D> {
         State {
-            selected_name: None,
+            id: None,
             selected_hasher: None,
             selected_signer: None,
             selected_q_signer: None,
@@ -242,7 +279,7 @@ where
     /// but all cipher suits are still in the hashmaps ready to be used.
     ///
     pub fn reset(&mut self) {
-        self.selected_name = None;
+        self.id = None;
         self.selected_hasher = None;
         self.selected_signer = None;
         self.selected_q_signer = None;
@@ -361,22 +398,36 @@ where
         Err(ErrorState::SelectedSignerDoesNotExist)
     }
 
-    //   pub fn hello(&self) -> Result<Hello, ErrorState> {
-    //       if let Some(_) = self.selected_name {
-    //           return Err(ErrorState::StateNotReset);
-    //       }
+    pub fn hello(&self) -> Result<Hello, ErrorState> {
+        if let Some(_) = self.id {
+            return Err(ErrorState::StateNotReset);
+        }
 
-    //       Some(Hello {})
-    //   }
+        // TODO: Refactor to represent all types and move to proper place.
+        let hash_suite: &[String] = &["SHA3_512".to_string()];
+        let cipher_suit_sigh: &[String] = &["ED25519".to_string()];
+        let cipher_suits_encapsulate: &[String] = &["RSA2048".to_string()];
+        let q_cipher_suits_sign: &[String] = &["SPHINCSSHAKE256FSIMPLE".to_string()];
+        let q_cipher_suits_encapsulate: &[String] = &["KYBER1024".to_string()];
+
+        let id_slice = random_hash();
+        if id_slice.len() != 32 {
+            return Err(ErrorState::UnexpectedFailure);
+        }
+
+        let mut id_arr: [u8; 32] = [0u8; 32];
+
+        for i in 0..id_slice.len() {
+            id_arr[i] = id_slice[i];
+        }
+
+        Ok(Hello::new_request(
+            id_arr,
+            hash_suite,
+            cipher_suit_sigh,
+            cipher_suits_encapsulate,
+            q_cipher_suits_sign,
+            q_cipher_suits_encapsulate,
+        ))
+    }
 }
-
-//fn random_hash() -> &[u8] {
-//    let mut rng = rand::thread_rng();
-//    let hash_size = ;
-//    let mut random_bytes = vec![0; hash_size];
-//    rng.fill(&mut random_bytes);
-//
-//    let mut hasher = Sha256::new();
-//    hasher.input(&random_bytes);
-//    hasher.result()
-//}

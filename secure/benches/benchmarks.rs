@@ -5,6 +5,7 @@ use secure::asymmetric_quant_cipher::*;
 use secure::asymmetric_quant_signer::*;
 use secure::globals::EncryptorDecryptor;
 use secure::globals::{AddressReader as _, EncapsulatorDecapsulator};
+use secure::randomizer;
 use secure::transaction::*;
 
 fn benchmark_transaction_issue(c: &mut Criterion) {
@@ -145,6 +146,12 @@ fn benchmark_asymmetric_key_decryption(c: &mut Criterion) {
     });
 }
 
+fn benchmark_random_hash(c: &mut Criterion) {
+    c.bench_function("benchmark_random_hash", |b| {
+        b.iter(|| randomizer::random_hash());
+    });
+}
+
 criterion_group!(
     benches,
     benchmark_transaction_issue,
@@ -154,6 +161,7 @@ criterion_group!(
     benchmark_asymmetric_key_encapsulation,
     benchmark_asymmetric_key_decapsulation,
     benchmark_asymmetric_key_encryption,
-    benchmark_asymmetric_key_decryption
+    benchmark_asymmetric_key_decryption,
+    benchmark_random_hash
 );
 criterion_main!(benches);

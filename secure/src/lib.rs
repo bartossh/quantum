@@ -4,4 +4,5 @@ pub mod asymmetric_quant_cipher;
 pub mod asymmetric_quant_signer;
 pub mod globals;
 pub mod handshake;
+pub mod randomizer;
 pub mod transaction;
