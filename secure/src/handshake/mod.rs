@@ -2,17 +2,22 @@ use crate::globals::{
     AddressReader, AsVectorBytes, EncapsulatorDecapsulator, EncryptorDecryptor, Signer, Verifier,
 };
 use digest::{Digest, OutputSizeUser};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
+use sha3::Sha3_256;
 use std::collections::HashMap;
 use std::hash::Hash;
 
+const VERSION: &str = "1.0.0";
+
 /// ErrorAssignation contains Assignation errors.
 ///
-pub enum ErrorAssignation {
+pub enum ErrorState {
     UnexpectedFailure,
     EntityAlreadyExists,
     SelectedSignerDoesNotExist,
     SelectedEncapsulatorDoesNotExist,
+    StateNotReset,
 }
 
 /// CipherSuits contains list of cipher suits or selected cipher suit for the ephemeral key exchange.
@@ -28,7 +33,7 @@ enum CipherSuites {
 ///  
 #[derive(Serialize, Deserialize)]
 pub struct Hello {
-    name: String,
+    client_name: String,
     version: String,
     hash_suits: CipherSuites,
     cipher_suits_sign: CipherSuites,
@@ -41,7 +46,7 @@ impl Hello {
     #[inline]
     fn estimated_size(&self) -> usize {
         let mut size = 0;
-        size += self.name.len() + self.version.len();
+        size += self.client_name.len() + self.version.len();
         for t in [
             &self.hash_suits,
             &self.cipher_suits_sign,
@@ -68,7 +73,7 @@ impl AsVectorBytes for Hello {
     #[inline]
     fn as_vector_bytes(&self) -> Vec<u8> {
         let mut buf: Vec<u8> = Vec::with_capacity(self.estimated_size());
-        buf.extend(self.name.as_bytes());
+        buf.extend(self.client_name.as_bytes());
         buf.extend(self.version.as_bytes());
         for t in [
             &self.hash_suits,
@@ -156,7 +161,7 @@ impl SecretKeyCiphered {
         q_cipher: &dyn EncapsulatorDecapsulator,
         signer: SA,
         q_signer: SA,
-    ) -> Result<(SecretKeyCiphered, Vec<u8>), ErrorAssignation> {
+    ) -> Result<(SecretKeyCiphered, Vec<u8>), ErrorState> {
         if let Ok((ss, ct)) = q_cipher.encapsulate_shared_key(handshaker_public_key) {
             if let Ok(ciphertext) = cipher.encrypt(cipher.address(), &ct) {
                 let signature = signer.sign(&ciphertext[..]);
@@ -175,23 +180,24 @@ impl SecretKeyCiphered {
                 ));
             }
         } else {
-            return Err(ErrorAssignation::UnexpectedFailure);
+            return Err(ErrorState::UnexpectedFailure);
         };
 
-        Err(ErrorAssignation::UnexpectedFailure)
+        Err(ErrorState::UnexpectedFailure)
     }
 }
 
-/// Assignation stores the the date exchanged in handshake and agreed cryptography and post-quantum cryptography protocols.
+/// State contains handshake state and agreed cryptography and post-quantum cryptography protocols.
 /// The task of this entity is to create SecretKey that is in further use to encrypt data exchange between E2E clients.
 ///
-pub struct Assignation<SV, ED, ECDC, D>
+pub struct State<SV, ED, ECDC, D>
 where
     SV: Signer + Verifier,
     ED: EncapsulatorDecapsulator,
     ECDC: EncryptorDecryptor,
     D: Digest,
 {
+    selected_name: Option<String>,
     selected_hasher: Option<String>,
     selected_signer: Option<String>,
     selected_q_signer: Option<String>,
@@ -205,7 +211,7 @@ where
     handshake_data: Vec<u8>,
 }
 
-impl<SV, ED, ECDC, D> Assignation<SV, ED, ECDC, D>
+impl<SV, ED, ECDC, D> State<SV, ED, ECDC, D>
 where
     SV: Signer + Verifier,
     ED: EncapsulatorDecapsulator,
@@ -214,8 +220,9 @@ where
 {
     /// Creates new Assignation entity with empty Cipher Suits.
     ///
-    pub fn new() -> Assignation<SV, ED, ECDC, D> {
-        Assignation {
+    pub fn new() -> State<SV, ED, ECDC, D> {
+        State {
+            selected_name: None,
             selected_hasher: None,
             selected_signer: None,
             selected_q_signer: None,
@@ -235,6 +242,7 @@ where
     /// but all cipher suits are still in the hashmaps ready to be used.
     ///
     pub fn reset(&mut self) {
+        self.selected_name = None;
         self.selected_hasher = None;
         self.selected_signer = None;
         self.selected_q_signer = None;
@@ -245,9 +253,9 @@ where
 
     /// Sets hasher cipher suit.
     ///
-    pub fn set_hasher(&mut self, name: String, d: D) -> Result<(), ErrorAssignation> {
+    pub fn set_hasher(&mut self, name: String, d: D) -> Result<(), ErrorState> {
         if self.hashers.contains_key(&name) {
-            return Err(ErrorAssignation::EntityAlreadyExists);
+            return Err(ErrorState::EntityAlreadyExists);
         }
         let _ = self.hashers.insert(name, d);
 
@@ -256,9 +264,9 @@ where
 
     /// Sets signer for pre-quantum cryptography cipher suit.
     ///
-    pub fn set_signer(&mut self, name: String, s: SV) -> Result<(), ErrorAssignation> {
+    pub fn set_signer(&mut self, name: String, s: SV) -> Result<(), ErrorState> {
         if self.signers.contains_key(&name) {
-            return Err(ErrorAssignation::EntityAlreadyExists);
+            return Err(ErrorState::EntityAlreadyExists);
         }
         let _ = self.signers.insert(name, s);
 
@@ -267,9 +275,9 @@ where
 
     /// Sets signer for post-quantum cryptography cipher suit.
     ///
-    pub fn set_q_signer(&mut self, name: String, s: SV) -> Result<(), ErrorAssignation> {
+    pub fn set_q_signer(&mut self, name: String, s: SV) -> Result<(), ErrorState> {
         if self.q_signers.contains_key(&name) {
-            return Err(ErrorAssignation::EntityAlreadyExists);
+            return Err(ErrorState::EntityAlreadyExists);
         }
         let _ = self.q_signers.insert(name, s);
 
@@ -278,9 +286,9 @@ where
 
     /// Sets encapsulator for pre-quantum cryptography cipher suit.
     ///
-    pub fn set_encapsulator(&mut self, name: String, s: ED) -> Result<(), ErrorAssignation> {
+    pub fn set_encapsulator(&mut self, name: String, s: ED) -> Result<(), ErrorState> {
         if self.encapsulators.contains_key(&name) {
-            return Err(ErrorAssignation::EntityAlreadyExists);
+            return Err(ErrorState::EntityAlreadyExists);
         }
         let _ = self.encapsulators.insert(name, s);
 
@@ -289,9 +297,9 @@ where
 
     /// Sets encapsulator for post-quantum cryptography cipher suit.
     ///
-    pub fn set_q_encapsulator(&mut self, name: String, ecdc: ECDC) -> Result<(), ErrorAssignation> {
+    pub fn set_q_encapsulator(&mut self, name: String, ecdc: ECDC) -> Result<(), ErrorState> {
         if self.q_encapsulators.contains_key(&name) {
-            return Err(ErrorAssignation::EntityAlreadyExists);
+            return Err(ErrorState::EntityAlreadyExists);
         }
         let _ = self.q_encapsulators.insert(name, ecdc);
 
@@ -300,56 +308,75 @@ where
 
     /// Selects hasher cipher suit.
     ///
-    pub fn select_hasher(&mut self, name: String) -> Result<&D, ErrorAssignation> {
+    pub fn select_hasher(&mut self, name: String) -> Result<&D, ErrorState> {
         if let Some(h) = self.hashers.get(&name) {
             self.selected_hasher = Some(name);
             return Ok(h);
         }
 
-        Err(ErrorAssignation::SelectedSignerDoesNotExist)
+        Err(ErrorState::SelectedSignerDoesNotExist)
     }
 
     /// Selects signer for pre-quantum cryptography cipher suit.
     ///
-    pub fn select_signer(&mut self, name: String) -> Result<&SV, ErrorAssignation> {
+    pub fn select_signer(&mut self, name: String) -> Result<&SV, ErrorState> {
         if let Some(sv) = self.signers.get(&name) {
             self.selected_signer = Some(name);
             return Ok(sv);
         }
 
-        Err(ErrorAssignation::SelectedSignerDoesNotExist)
+        Err(ErrorState::SelectedSignerDoesNotExist)
     }
 
     /// Selects signer for post-quantum cryptography cipher suit.
     ///
-    pub fn select_q_signer(&mut self, name: String) -> Result<&SV, ErrorAssignation> {
+    pub fn select_q_signer(&mut self, name: String) -> Result<&SV, ErrorState> {
         if let Some(sv) = self.q_signers.get(&name) {
             self.selected_q_signer = Some(name);
             return Ok(sv);
         }
 
-        Err(ErrorAssignation::SelectedSignerDoesNotExist)
+        Err(ErrorState::SelectedSignerDoesNotExist)
     }
 
     /// Selects encapsulator for pre-quantum cryptography cipher suit.
     ///
-    pub fn select_encapsulator(&mut self, name: String) -> Result<&ED, ErrorAssignation> {
+    pub fn select_encapsulator(&mut self, name: String) -> Result<&ED, ErrorState> {
         if let Some(ed) = self.encapsulators.get(&name) {
             self.selected_encapsulator = Some(name);
             return Ok(ed);
         }
 
-        Err(ErrorAssignation::SelectedSignerDoesNotExist)
+        Err(ErrorState::SelectedSignerDoesNotExist)
     }
 
     /// Selects encapsulator for post-quantum cryptography cipher suit.
     ///
-    pub fn select_q_encapsulator(&mut self, name: String) -> Result<&ECDC, ErrorAssignation> {
+    pub fn select_q_encapsulator(&mut self, name: String) -> Result<&ECDC, ErrorState> {
         if let Some(ecdc) = self.q_encapsulators.get(&name) {
             self.selected_q_encapsulator = Some(name);
             return Ok(ecdc);
         }
 
-        Err(ErrorAssignation::SelectedSignerDoesNotExist)
+        Err(ErrorState::SelectedSignerDoesNotExist)
     }
+
+    //   pub fn hello(&self) -> Result<Hello, ErrorState> {
+    //       if let Some(_) = self.selected_name {
+    //           return Err(ErrorState::StateNotReset);
+    //       }
+
+    //       Some(Hello {})
+    //   }
 }
+
+//fn random_hash() -> &[u8] {
+//    let mut rng = rand::thread_rng();
+//    let hash_size = ;
+//    let mut random_bytes = vec![0; hash_size];
+//    rng.fill(&mut random_bytes);
+//
+//    let mut hasher = Sha256::new();
+//    hasher.input(&random_bytes);
+//    hasher.result()
+//}

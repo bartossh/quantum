@@ -1,11 +1,11 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use crypto::asymmetric_pre_quant_cipher::CipherWallet;
-use crypto::asymmetric_pre_quant_signer::SignerWallet as PreQuantSignerWallet;
-use crypto::asymmetric_quant_cipher::*;
-use crypto::asymmetric_quant_signer::*;
-use crypto::globals::EncryptorDecryptor;
-use crypto::globals::{AddressReader as _, EncapsulatorDecapsulator};
-use crypto::transaction::*;
+use secure::asymmetric_pre_quant_cipher::CipherWallet;
+use secure::asymmetric_pre_quant_signer::SignerWallet as PreQuantSignerWallet;
+use secure::asymmetric_quant_cipher::*;
+use secure::asymmetric_quant_signer::*;
+use secure::globals::EncryptorDecryptor;
+use secure::globals::{AddressReader as _, EncapsulatorDecapsulator};
+use secure::transaction::*;
 
 fn benchmark_transaction_issue(c: &mut Criterion) {
     c.bench_function("benchmark_transaction_issue", |b| {

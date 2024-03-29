@@ -5,7 +5,7 @@ use rsa::{
     pkcs8::LineEnding,
     Oaep, RsaPrivateKey, RsaPublicKey,
 };
-use sha2::Sha256;
+use sha3::Sha3_512;
 
 const BITS: usize = 2048;
 const VERSION: &'static [u8; 2] = b"01";
@@ -49,7 +49,7 @@ impl AddressReader for CipherWallet {
 
 impl EncryptorDecryptor for CipherWallet {
     fn decrypt(&self, msg: &[u8]) -> Result<Vec<u8>, ErrorEncryptDecrypter> {
-        let padding = Oaep::new::<Sha256>();
+        let padding = Oaep::new::<Sha3_512>();
         if let Ok(decrypted) = self.sk.decrypt(padding, msg) {
             return Ok(decrypted);
         }
@@ -65,7 +65,7 @@ impl EncryptorDecryptor for CipherWallet {
             if let Ok(pem) = String::from_utf8(decoded[2..].to_vec()) {
                 if let Ok(encrypting_key) = RsaPublicKey::from_pkcs1_pem(&pem) {
                     let mut rng = thread_rng();
-                    let padding = Oaep::new::<Sha256>();
+                    let padding = Oaep::new::<Sha3_512>();
                     if let Ok(encrypted) = encrypting_key.encrypt(&mut rng, padding, msg) {
                         return Ok(encrypted);
                     }

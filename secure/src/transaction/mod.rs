@@ -330,7 +330,7 @@ mod tests {
         for _ in 0..cap {
             data.push(128);
         }
-        let mut trx = Transaction::issue(
+        let trx = Transaction::issue(
             &issuer,
             &q_issuer,
             "next transaction".to_string(),
