@@ -9,14 +9,22 @@ use std::hash::Hash;
 
 const VERSION: &str = "1.0.0";
 
+const HASH_SUIT: &str = "SHA3_512";
+const CIPHER_SING_SUIT: &str = "ED25519";
+const CIPHER_ENCAPSULATION_SUIT: &str = "RSA2048";
+const Q_CIPHER_SING_SUIT: &str = "SPHINCSSHAKE256FSIMPLE";
+const Q_CIPHER_ENCAPSULATION_SUIT: &str = "KYBER1024";
+
 /// ErrorAssignation contains Assignation errors.
 ///
 pub enum ErrorState {
     UnexpectedFailure,
     EntityAlreadyExists,
+    SelectedHasherDoesNotExist,
     SelectedSignerDoesNotExist,
     SelectedEncapsulatorDoesNotExist,
     StateNotReset,
+    WrongIdPresented,
 }
 
 /// CipherSuits contains list of cipher suits or selected cipher suit for the ephemeral key exchange.
@@ -177,7 +185,7 @@ impl AsVectorBytes for PublicKey {
 /// Secret key is a ciphered message established for the encryption session between E2E clients.
 /// All the future messages are encrypted with the SecretKey.
 ///
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SecretKeyCiphered {
     handshake_hash: Vec<u8>,
     ciphertext: Vec<u8>,
@@ -224,9 +232,42 @@ impl SecretKeyCiphered {
     }
 }
 
+/// Position describers current handshake state position.
+///
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Position {
+    Reset,
+    Hello,
+}
+
+/// Describes which precedence to choose.
+///
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Precedence {
+    Hash,
+    Signer,
+    Cipher,
+    QSigner,
+    QCipher,
+}
+
+// TODO: refactor this to get vector of highest ranking protocols in decreasing order.
+impl Precedence {
+    fn get_precedence(&self) -> String {
+        match *self {
+            Precedence::Hash => HASH_SUIT.to_owned(),
+            Precedence::Cipher => CIPHER_ENCAPSULATION_SUIT.to_owned(),
+            Precedence::Signer => CIPHER_SING_SUIT.to_owned(),
+            Precedence::QCipher => Q_CIPHER_ENCAPSULATION_SUIT.to_owned(),
+            Precedence::QSigner => Q_CIPHER_SING_SUIT.to_owned(),
+        }
+    }
+}
+
 /// State contains handshake state and agreed cryptography and post-quantum cryptography protocols.
 /// The task of this entity is to create SecretKey that is in further use to encrypt data exchange between E2E clients.
 ///
+#[derive(Debug, Clone)]
 pub struct State<SV, ED, ECDC, D>
 where
     SV: Signer + Verifier,
@@ -235,6 +276,7 @@ where
     D: Digest,
 {
     id: Option<[u8; 32]>,
+    position: Position,
     selected_hasher: Option<String>,
     selected_signer: Option<String>,
     selected_q_signer: Option<String>,
@@ -260,6 +302,7 @@ where
     pub fn new() -> State<SV, ED, ECDC, D> {
         State {
             id: None,
+            position: Position::Reset,
             selected_hasher: None,
             selected_signer: None,
             selected_q_signer: None,
@@ -398,17 +441,12 @@ where
         Err(ErrorState::SelectedSignerDoesNotExist)
     }
 
-    pub fn hello(&self) -> Result<Hello, ErrorState> {
-        if let Some(_) = self.id {
+    /// Create hello with proposed protocols for the handshake stage 1.
+    ///
+    pub fn hello_propose(&mut self) -> Result<Hello, ErrorState> {
+        if self.position != Position::Reset {
             return Err(ErrorState::StateNotReset);
         }
-
-        // TODO: Refactor to represent all types and move to proper place.
-        let hash_suite: &[String] = &["SHA3_512".to_string()];
-        let cipher_suit_sigh: &[String] = &["ED25519".to_string()];
-        let cipher_suits_encapsulate: &[String] = &["RSA2048".to_string()];
-        let q_cipher_suits_sign: &[String] = &["SPHINCSSHAKE256FSIMPLE".to_string()];
-        let q_cipher_suits_encapsulate: &[String] = &["KYBER1024".to_string()];
 
         let id_slice = random_hash();
         if id_slice.len() != 32 {
@@ -421,13 +459,102 @@ where
             id_arr[i] = id_slice[i];
         }
 
-        Ok(Hello::new_request(
+        let mut hash_suite: Vec<String> = Vec::new();
+        let mut cipher_suit_sigh: Vec<String> = Vec::new();
+        let mut cipher_suits_encapsulate: Vec<String> = Vec::new();
+        let mut q_cipher_suits_sign: Vec<String> = Vec::new();
+        let mut q_cipher_suits_encapsulate: Vec<String> = Vec::new();
+
+        for (k, _) in self.hashers.iter() {
+            hash_suite.push(k.to_string());
+        }
+        for (k, _) in self.signers.iter() {
+            cipher_suit_sigh.push(k.to_string());
+        }
+        for (k, _) in self.encapsulators.iter() {
+            cipher_suits_encapsulate.push(k.to_string());
+        }
+        for (k, _) in self.q_signers.iter() {
+            q_cipher_suits_sign.push(k.to_string());
+        }
+        for (k, _) in self.q_encapsulators.iter() {
+            q_cipher_suits_encapsulate.push(k.to_string());
+        }
+
+        let hello = Hello::new_request(
             id_arr,
-            hash_suite,
-            cipher_suit_sigh,
-            cipher_suits_encapsulate,
-            q_cipher_suits_sign,
-            q_cipher_suits_encapsulate,
-        ))
+            &hash_suite,
+            &cipher_suit_sigh,
+            &cipher_suits_encapsulate,
+            &q_cipher_suits_sign,
+            &q_cipher_suits_encapsulate,
+        );
+
+        self.id = Some(id_arr);
+        self.position = Position::Hello;
+        self.handshake_data.extend(hello.as_vector_bytes());
+
+        Ok(hello)
+    }
+
+    /// Create hello selected protocols.
+    ///
+    pub fn hello_selected(&mut self, hello: &Hello) -> Result<Hello, ErrorState> {
+        if self.position != Position::Reset {
+            return Err(ErrorState::StateNotReset);
+        }
+
+        let hash = Precedence::Hash.get_precedence();
+        let cipher = Precedence::Cipher.get_precedence();
+        let signer = Precedence::Signer.get_precedence();
+        let q_cipher = Precedence::QCipher.get_precedence();
+        let q_signer = Precedence::QSigner.get_precedence();
+
+        if let CipherSuites::List(v) = &hello.hash_suits {
+            if !v.contains(&hash) {
+                return Err(ErrorState::SelectedHasherDoesNotExist);
+            }
+        }
+        if let CipherSuites::List(v) = &hello.cipher_suits_encapsulate {
+            if !v.contains(&cipher) {
+                return Err(ErrorState::SelectedHasherDoesNotExist);
+            }
+        }
+        if let CipherSuites::List(v) = &hello.cipher_suits_sign {
+            if !v.contains(&signer) {
+                return Err(ErrorState::SelectedHasherDoesNotExist);
+            }
+        }
+        if let CipherSuites::List(v) = &hello.q_cipher_suits_encapsulate {
+            if !v.contains(&q_cipher) {
+                return Err(ErrorState::SelectedHasherDoesNotExist);
+            }
+        }
+        if let CipherSuites::List(v) = &hello.q_cipher_suits_sign {
+            if !v.contains(&q_signer) {
+                return Err(ErrorState::SelectedHasherDoesNotExist);
+            }
+        }
+
+        let hello_response = Hello::new_response(
+            hello.id,
+            hash.to_owned(),
+            signer.to_owned(),
+            cipher.to_owned(),
+            q_signer.to_owned(),
+            q_cipher.to_owned(),
+        );
+
+        self.selected_hasher = Some(hash);
+        self.selected_signer = Some(signer);
+        self.selected_encapsulator = Some(cipher);
+        self.selected_q_signer = Some(q_signer);
+        self.selected_q_encapsulator = Some(q_cipher);
+        self.position = Position::Hello;
+        self.id = Some(hello.id);
+        self.handshake_data.extend(&hello.as_vector_bytes());
+        self.handshake_data.extend(hello_response.as_vector_bytes());
+
+        Ok(hello_response)
     }
 }
