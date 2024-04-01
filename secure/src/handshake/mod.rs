@@ -2,8 +2,9 @@ use crate::globals::{
     AddressReader, AsVectorBytes, EncapsulatorDecapsulator, EncryptorDecryptor, Signer, Verifier,
 };
 use crate::randomizer::random_hash;
-use digest::{Digest, OutputSizeUser};
+use digest::{Digest, FixedOutput, OutputSizeUser, Reset};
 use serde::{Deserialize, Serialize};
+use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::hash::Hash;
 
@@ -24,6 +25,7 @@ pub enum ErrorState {
     SelectedSignerDoesNotExist,
     SelectedEncapsulatorDoesNotExist,
     StateNotReset,
+    StateNotHello,
     WrongIdPresented,
 }
 
@@ -42,6 +44,10 @@ enum CipherSuites {
 pub struct Hello {
     id: [u8; 32],
     version: String,
+    sign_address: Option<String>,
+    q_sign_address: Option<String>,
+    cipher_address: Option<String>,
+    q_cipher_address: Option<String>,
     hash_suits: CipherSuites,
     cipher_suits_sign: CipherSuites,
     cipher_suits_encapsulate: CipherSuites,
@@ -61,6 +67,10 @@ impl Hello {
         Hello {
             id,
             version: VERSION.to_string(),
+            sign_address: None,
+            q_sign_address: None,
+            cipher_address: None,
+            q_cipher_address: None,
             hash_suits: CipherSuites::List(hash_suite.to_vec()),
             cipher_suits_sign: CipherSuites::List(cipher_suit_sigh.to_vec()),
             cipher_suits_encapsulate: CipherSuites::List(cipher_suits_encapsulate.to_vec()),
@@ -71,6 +81,10 @@ impl Hello {
 
     fn new_response(
         id: [u8; 32],
+        sign_address: String,
+        q_sign_address: String,
+        cipher_address: String,
+        q_cipher_address: String,
         hash_suite: String,
         cipher_suit_sigh: String,
         cipher_suits_encapsulate: String,
@@ -79,6 +93,10 @@ impl Hello {
     ) -> Hello {
         Hello {
             id,
+            sign_address: Some(sign_address),
+            q_sign_address: Some(q_sign_address),
+            cipher_address: Some(cipher_address),
+            q_cipher_address: Some(q_cipher_address),
             version: VERSION.to_string(),
             hash_suits: CipherSuites::Selected(hash_suite),
             cipher_suits_sign: CipherSuites::Selected(cipher_suit_sigh),
@@ -92,6 +110,17 @@ impl Hello {
     fn estimated_size(&self) -> usize {
         let mut size = 0;
         size += self.id.len() + self.version.len();
+        for t in [
+            &self.sign_address,
+            &self.q_sign_address,
+            &self.cipher_address,
+            &self.q_cipher_address,
+        ] {
+            match t {
+                Some(v) => size += v.len(),
+                None => (),
+            };
+        }
         for t in [
             &self.hash_suits,
             &self.cipher_suits_sign,
@@ -120,6 +149,19 @@ impl AsVectorBytes for Hello {
         let mut buf: Vec<u8> = Vec::with_capacity(self.estimated_size());
         buf.extend(self.id);
         buf.extend(self.version.as_bytes());
+
+        for t in [
+            &self.sign_address,
+            &self.q_sign_address,
+            &self.cipher_address,
+            &self.q_cipher_address,
+        ] {
+            match t {
+                Some(v) => buf.extend(v.as_bytes()),
+                None => (),
+            };
+        }
+
         for t in [
             &self.hash_suits,
             &self.cipher_suits_sign,
@@ -197,22 +239,29 @@ pub struct SecretKeyCiphered {
 
 impl SecretKeyCiphered {
     pub fn from_ciphers_with_secret<
-        EDA: EncryptorDecryptor + AddressReader,
+        ED: EncapsulatorDecapsulator + AddressReader,
+        ECDC: EncryptorDecryptor + AddressReader,
         SA: Signer + AddressReader,
+        D: Digest + FixedOutput + Copy,
     >(
-        handshake_hash: Vec<u8>,
-        handshaker_public_key: String,
-        cipher: EDA,
-        q_cipher: &dyn EncapsulatorDecapsulator,
-        signer: SA,
-        q_signer: SA,
-    ) -> Result<(SecretKeyCiphered, Vec<u8>), ErrorState> {
-        if let Ok((ss, ct)) = q_cipher.encapsulate_shared_key(handshaker_public_key) {
-            if let Ok(ciphertext) = cipher.encrypt(cipher.address(), &ct) {
+        handshake_data: &[u8],
+        cipher_public_key: String,
+        q_cipher_public_key: String,
+        hasher: &D,
+        cipher: &ECDC,
+        q_cipher: &ED,
+        signer: &SA,
+        q_signer: &SA,
+    ) -> Option<(SecretKeyCiphered, Vec<u8>)> {
+        if let Ok((ss, ct)) = q_cipher.encapsulate_shared_key(q_cipher_public_key) {
+            if let Ok(ciphertext) = cipher.encrypt(cipher_public_key, &ct) {
                 let signature = signer.sign(&ciphertext[..]);
                 let q_signature = q_signer.sign(&ciphertext[..]);
-
-                return Ok((
+                let _ = hasher.chain_update(handshake_data);
+                let _ = hasher.chain_update(signer.address().as_bytes());
+                let _ = hasher.chain_update(q_signer.address().as_bytes());
+                let handshake_hash = hasher.finalize().as_slice().to_vec();
+                return Some((
                     SecretKeyCiphered {
                         handshake_hash,
                         ciphertext: ciphertext,
@@ -224,11 +273,9 @@ impl SecretKeyCiphered {
                     ss,
                 ));
             }
-        } else {
-            return Err(ErrorState::UnexpectedFailure);
-        };
+        }
 
-        Err(ErrorState::UnexpectedFailure)
+        None
     }
 }
 
@@ -238,6 +285,7 @@ impl SecretKeyCiphered {
 enum Position {
     Reset,
     Hello,
+    SharedKey,
 }
 
 /// Describes which precedence to choose.
@@ -270,10 +318,10 @@ impl Precedence {
 #[derive(Debug, Clone)]
 pub struct State<SV, ED, ECDC, D>
 where
-    SV: Signer + Verifier,
-    ED: EncapsulatorDecapsulator,
-    ECDC: EncryptorDecryptor,
-    D: Digest,
+    SV: Signer + Verifier + AddressReader + Copy,
+    ED: EncapsulatorDecapsulator + AddressReader + Copy,
+    ECDC: EncryptorDecryptor + AddressReader + Copy,
+    D: Digest + OutputSizeUser + FixedOutput + Copy,
 {
     id: Option<[u8; 32]>,
     position: Position,
@@ -285,17 +333,17 @@ where
     hashers: HashMap<String, D>,
     signers: HashMap<String, SV>,
     q_signers: HashMap<String, SV>,
-    encapsulators: HashMap<String, ED>,
-    q_encapsulators: HashMap<String, ECDC>,
+    encapsulators: HashMap<String, ECDC>,
+    q_encapsulators: HashMap<String, ED>,
     handshake_data: Vec<u8>,
 }
 
 impl<SV, ED, ECDC, D> State<SV, ED, ECDC, D>
 where
-    SV: Signer + Verifier,
-    ED: EncapsulatorDecapsulator,
-    ECDC: EncryptorDecryptor,
-    D: Digest + OutputSizeUser,
+    SV: Signer + Verifier + AddressReader + Copy,
+    ED: EncapsulatorDecapsulator + AddressReader + Copy,
+    ECDC: EncryptorDecryptor + AddressReader + Copy,
+    D: Digest + OutputSizeUser + FixedOutput + Copy,
 {
     /// Creates new Assignation entity with empty Cipher Suits.
     ///
@@ -366,91 +414,36 @@ where
 
     /// Sets encapsulator for pre-quantum cryptography cipher suit.
     ///
-    pub fn set_encapsulator(&mut self, name: String, s: ED) -> Result<(), ErrorState> {
+    pub fn set_encapsulator(&mut self, name: String, ecdc: ECDC) -> Result<(), ErrorState> {
         if self.encapsulators.contains_key(&name) {
             return Err(ErrorState::EntityAlreadyExists);
         }
-        let _ = self.encapsulators.insert(name, s);
+        let _ = self.encapsulators.insert(name, ecdc);
 
         Ok(())
     }
 
     /// Sets encapsulator for post-quantum cryptography cipher suit.
     ///
-    pub fn set_q_encapsulator(&mut self, name: String, ecdc: ECDC) -> Result<(), ErrorState> {
+    pub fn set_q_encapsulator(&mut self, name: String, ed: ED) -> Result<(), ErrorState> {
         if self.q_encapsulators.contains_key(&name) {
             return Err(ErrorState::EntityAlreadyExists);
         }
-        let _ = self.q_encapsulators.insert(name, ecdc);
+        let _ = self.q_encapsulators.insert(name, ed);
 
         Ok(())
     }
 
-    /// Selects hasher cipher suit.
-    ///
-    pub fn select_hasher(&mut self, name: String) -> Result<&D, ErrorState> {
-        if let Some(h) = self.hashers.get(&name) {
-            self.selected_hasher = Some(name);
-            return Ok(h);
-        }
-
-        Err(ErrorState::SelectedSignerDoesNotExist)
-    }
-
-    /// Selects signer for pre-quantum cryptography cipher suit.
-    ///
-    pub fn select_signer(&mut self, name: String) -> Result<&SV, ErrorState> {
-        if let Some(sv) = self.signers.get(&name) {
-            self.selected_signer = Some(name);
-            return Ok(sv);
-        }
-
-        Err(ErrorState::SelectedSignerDoesNotExist)
-    }
-
-    /// Selects signer for post-quantum cryptography cipher suit.
-    ///
-    pub fn select_q_signer(&mut self, name: String) -> Result<&SV, ErrorState> {
-        if let Some(sv) = self.q_signers.get(&name) {
-            self.selected_q_signer = Some(name);
-            return Ok(sv);
-        }
-
-        Err(ErrorState::SelectedSignerDoesNotExist)
-    }
-
-    /// Selects encapsulator for pre-quantum cryptography cipher suit.
-    ///
-    pub fn select_encapsulator(&mut self, name: String) -> Result<&ED, ErrorState> {
-        if let Some(ed) = self.encapsulators.get(&name) {
-            self.selected_encapsulator = Some(name);
-            return Ok(ed);
-        }
-
-        Err(ErrorState::SelectedSignerDoesNotExist)
-    }
-
-    /// Selects encapsulator for post-quantum cryptography cipher suit.
-    ///
-    pub fn select_q_encapsulator(&mut self, name: String) -> Result<&ECDC, ErrorState> {
-        if let Some(ecdc) = self.q_encapsulators.get(&name) {
-            self.selected_q_encapsulator = Some(name);
-            return Ok(ecdc);
-        }
-
-        Err(ErrorState::SelectedSignerDoesNotExist)
-    }
-
     /// Create hello with proposed protocols for the handshake stage 1.
     ///
-    pub fn hello_propose(&mut self) -> Result<Hello, ErrorState> {
+    pub fn hello_propose(&mut self) -> Option<Hello> {
         if self.position != Position::Reset {
-            return Err(ErrorState::StateNotReset);
+            return None;
         }
 
         let id_slice = random_hash();
         if id_slice.len() != 32 {
-            return Err(ErrorState::UnexpectedFailure);
+            return None;
         }
 
         let mut id_arr: [u8; 32] = [0u8; 32];
@@ -494,14 +487,14 @@ where
         self.position = Position::Hello;
         self.handshake_data.extend(hello.as_vector_bytes());
 
-        Ok(hello)
+        Some(hello)
     }
 
-    /// Create hello selected protocols.
+    /// Selects protocols.
     ///
-    pub fn hello_selected(&mut self, hello: &Hello) -> Result<Hello, ErrorState> {
+    pub fn hello_select(&mut self, hello: &Hello) -> Option<Hello> {
         if self.position != Position::Reset {
-            return Err(ErrorState::StateNotReset);
+            return None;
         }
 
         let hash = Precedence::Hash.get_precedence();
@@ -512,49 +505,133 @@ where
 
         if let CipherSuites::List(v) = &hello.hash_suits {
             if !v.contains(&hash) {
-                return Err(ErrorState::SelectedHasherDoesNotExist);
+                return None;
             }
         }
         if let CipherSuites::List(v) = &hello.cipher_suits_encapsulate {
             if !v.contains(&cipher) {
-                return Err(ErrorState::SelectedHasherDoesNotExist);
+                return None;
             }
         }
         if let CipherSuites::List(v) = &hello.cipher_suits_sign {
             if !v.contains(&signer) {
-                return Err(ErrorState::SelectedHasherDoesNotExist);
+                return None;
             }
         }
         if let CipherSuites::List(v) = &hello.q_cipher_suits_encapsulate {
             if !v.contains(&q_cipher) {
-                return Err(ErrorState::SelectedHasherDoesNotExist);
+                return None;
             }
         }
         if let CipherSuites::List(v) = &hello.q_cipher_suits_sign {
             if !v.contains(&q_signer) {
-                return Err(ErrorState::SelectedHasherDoesNotExist);
+                return None;
             }
         }
 
+        self.selected_hasher = Some(hash.clone());
+        self.selected_signer = Some(signer.clone());
+        self.selected_encapsulator = Some(cipher.clone());
+        self.selected_q_signer = Some(q_signer.clone());
+        self.selected_q_encapsulator = Some(q_cipher.clone());
+        self.position = Position::Hello;
+        self.id = Some(hello.id);
+        self.handshake_data.extend(&hello.as_vector_bytes());
+
         let hello_response = Hello::new_response(
             hello.id,
-            hash.to_owned(),
+            hello.sign_address.clone()?,
+            hello.q_sign_address.clone()?,
+            hello.cipher_address.clone()?,
+            hello.q_cipher_address.clone()?,
+            hash.clone(),
             signer.to_owned(),
             cipher.to_owned(),
             q_signer.to_owned(),
             q_cipher.to_owned(),
         );
 
-        self.selected_hasher = Some(hash);
-        self.selected_signer = Some(signer);
-        self.selected_encapsulator = Some(cipher);
-        self.selected_q_signer = Some(q_signer);
-        self.selected_q_encapsulator = Some(q_cipher);
-        self.position = Position::Hello;
-        self.id = Some(hello.id);
-        self.handshake_data.extend(&hello.as_vector_bytes());
         self.handshake_data.extend(hello_response.as_vector_bytes());
 
-        Ok(hello_response)
+        Some(hello_response)
+    }
+
+    pub fn hello_selected_to_cipher(
+        &mut self,
+        hello: &Hello,
+    ) -> Option<(SecretKeyCiphered, Vec<u8>)> {
+        if self.position != Position::Hello {
+            return None;
+        }
+
+        self.handshake_data.extend(hello.as_vector_bytes());
+
+        if let CipherSuites::Selected(hash) = hello.hash_suits.borrow() {
+            if let Some(_) = self.hashers.get(hash) {
+                self.selected_hasher = Some(hash.clone());
+            } else {
+                return None;
+            }
+        } else {
+            return None;
+        }
+
+        if let CipherSuites::Selected(signer) = hello.cipher_suits_sign.borrow() {
+            if let Some(_) = self.signers.get(signer) {
+                self.selected_signer = Some(signer.clone());
+            } else {
+                return None;
+            }
+        } else {
+            return None;
+        }
+
+        if let CipherSuites::Selected(signer) = hello.q_cipher_suits_sign.borrow() {
+            if let Some(_) = self.q_signers.get(signer) {
+                self.selected_q_signer = Some(signer.clone());
+            } else {
+                return None;
+            }
+        } else {
+            return None;
+        }
+
+        if let CipherSuites::Selected(cipher) = hello.cipher_suits_encapsulate.borrow() {
+            if let Some(_) = self.encapsulators.get(cipher) {
+                self.selected_signer = Some(cipher.clone());
+            } else {
+                return None;
+            }
+        } else {
+            return None;
+        }
+
+        if let CipherSuites::Selected(cipher) = hello.q_cipher_suits_encapsulate.borrow() {
+            if let Some(_) = self.q_encapsulators.get(cipher) {
+                self.selected_encapsulator = Some(cipher.clone());
+            } else {
+                return None;
+            }
+        } else {
+            return None;
+        }
+
+        self.position = Position::SharedKey;
+
+        let ca = hello.cipher_address.clone()?;
+        let q_ca = hello.q_cipher_address.clone()?;
+
+        SecretKeyCiphered::from_ciphers_with_secret(
+            &self.handshake_data,
+            ca,
+            q_ca,
+            self.hashers.get(&self.selected_hasher.clone()?)?,
+            self.encapsulators
+                .get(&self.selected_encapsulator.clone()?)?,
+            self.q_encapsulators
+                .get(&self.selected_q_encapsulator.clone()?)?,
+            self.signers.get(&self.selected_signer.clone()?)?,
+            self.q_signers.get(&self.selected_q_signer.clone()?)?,
+        )
     }
 }
