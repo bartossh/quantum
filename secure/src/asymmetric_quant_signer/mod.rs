@@ -1,4 +1,6 @@
-use crate::globals::{AddressReader, ErrorSignerVerifier, Signer, Verifier};
+use crate::globals::{
+    AddressReader, ErrorSignerVerifier, Signer, SignerVerifierAddressReader, Verifier,
+};
 use pqcrypto::sign::sphincsshake256fsimple::{
     detached_sign, keypair, verify_detached_signature, DetachedSignature, PublicKey, SecretKey,
 };
@@ -63,6 +65,8 @@ impl Verifier for SignerWallet {
         Err(ErrorSignerVerifier::InvalidPublicKey)
     }
 }
+
+impl SignerVerifierAddressReader for SignerWallet {}
 
 impl SignerWallet {
     #[inline]

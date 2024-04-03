@@ -46,6 +46,10 @@ pub trait Verifier {
     ) -> Result<(), ErrorSignerVerifier>;
 }
 
+/// SignerVerifierAddressReader combines Signer, Verifier and AddressReader traits.
+///
+pub trait SignerVerifierAddressReader: Signer + Verifier + AddressReader {}
+
 /// Errors describing EncapsulatorDecapsulator failures.
 ///
 #[derive(Debug)]
@@ -75,6 +79,10 @@ pub trait EncapsulatorDecapsulator {
         -> Result<Vec<u8>, ErrorEncapsulateDecapsulate>;
 }
 
+/// EncapsulatorDecapsulatorAddressReader combines EncapsulatorDecapsulator and AddressReader traits.
+///
+pub trait EncapsulatorDecapsulatorAddressReader: EncapsulatorDecapsulator + AddressReader {}
+
 /// Errors describing EncryptDecrypter failures.
 ///
 #[derive(Debug)]
@@ -93,4 +101,24 @@ pub trait EncryptorDecryptor {
     /// Decrypts message encoded for Self with Self public address.
     ///
     fn decrypt(&self, msg: &[u8]) -> Result<Vec<u8>, ErrorEncryptDecrypter>;
+}
+
+/// EncryptorDecryptor combines EncryptorDecryptor and AddressReader traits.
+///
+pub trait EncryptorDecryptorAddressReader: EncryptorDecryptor + AddressReader {}
+
+/// Hasher hashes the given slice of bytes.
+///
+pub trait Hasher {
+    /// Hashes slice and returns digested vector.
+    ///
+    fn hash(&mut self, slice: &[u8]) -> Vec<u8>;
+
+    /// Resets hasher.
+    ///
+    fn reset(&mut self);
+
+    /// Hashes given slice and resets the hasher, returns digested vector.
+    ///
+    fn hash_reset(&mut self, slice: &[u8]) -> Vec<u8>;
 }

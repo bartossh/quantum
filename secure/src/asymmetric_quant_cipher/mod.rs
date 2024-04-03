@@ -1,4 +1,4 @@
-use crate::globals::AddressReader;
+use crate::globals::{AddressReader, EncapsulatorDecapsulatorAddressReader};
 use crate::globals::{EncapsulatorDecapsulator, ErrorEncapsulateDecapsulate};
 use pqcrypto::kem::kyber1024::{
     decapsulate, encapsulate, keypair, Ciphertext, PublicKey, SecretKey,
@@ -69,6 +69,8 @@ impl AddressReader for SharedKeyGeneratorWallet {
         enc.into_string()
     }
 }
+
+impl EncapsulatorDecapsulatorAddressReader for SharedKeyGeneratorWallet {}
 
 #[cfg(test)]
 mod tests {

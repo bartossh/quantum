@@ -1,20 +1,11 @@
-use crate::globals::{
-    AddressReader, AsVectorBytes, EncapsulatorDecapsulator, EncryptorDecryptor, Signer, Verifier,
-};
+mod secret;
+use crate::globals::AsVectorBytes;
 use crate::randomizer::random_hash;
-use digest::{Digest, FixedOutput, OutputSizeUser, Reset};
+use enum_iterator::all;
 use serde::{Deserialize, Serialize};
-use std::borrow::Borrow;
-use std::collections::HashMap;
-use std::hash::Hash;
+use std::{result::Result, sync::WaitTimeoutResult};
 
 const VERSION: &str = "1.0.0";
-
-const HASH_SUIT: &str = "SHA3_512";
-const CIPHER_SING_SUIT: &str = "ED25519";
-const CIPHER_ENCAPSULATION_SUIT: &str = "RSA2048";
-const Q_CIPHER_SING_SUIT: &str = "SPHINCSSHAKE256FSIMPLE";
-const Q_CIPHER_ENCAPSULATION_SUIT: &str = "KYBER1024";
 
 /// ErrorAssignation contains Assignation errors.
 ///
@@ -29,12 +20,109 @@ pub enum ErrorState {
     WrongIdPresented,
 }
 
-/// CipherSuits contains list of cipher suits or selected cipher suit for the ephemeral key exchange.
-///
-#[derive(Serialize, Deserialize, Hash)]
-enum CipherSuites {
-    List(Vec<String>),
-    Selected(String),
+fn get_precedence(
+    hs: &[secret::HashSuite],
+    cs: &[secret::CipherSuite],
+    qcs: &[secret::QCipherSuite],
+    ss: &[secret::SignerSuite],
+    qss: &[secret::QSignerSuite],
+) -> Result<
+    (
+        secret::HashSuite,
+        secret::CipherSuite,
+        secret::QCipherSuite,
+        secret::SignerSuite,
+        secret::QSignerSuite,
+    ),
+    (),
+> {
+    let mut shs: Option<secret::HashSuite> = None;
+    let mut scs: Option<secret::CipherSuite> = None;
+    let mut sqcs: Option<secret::QCipherSuite> = None;
+    let mut sss: Option<secret::SignerSuite> = None;
+    let mut sqss: Option<secret::QSignerSuite> = None;
+
+    for candidate in &[secret::HashSuite::Sha3_512] {
+        for item in hs {
+            if item == candidate {
+                shs = Some(*candidate);
+            }
+        }
+    }
+
+    for candidate in &[secret::CipherSuite::RSA2048] {
+        for item in cs {
+            if item == candidate {
+                scs = Some(*candidate);
+            }
+        }
+    }
+
+    for candidate in &[secret::QCipherSuite::KYBER1024] {
+        for item in qcs {
+            if item == candidate {
+                sqcs = Some(*candidate);
+            }
+        }
+    }
+
+    for candidate in &[secret::SignerSuite::ED25519] {
+        for item in ss {
+            if item == candidate {
+                sss = Some(*candidate);
+            }
+        }
+    }
+
+    for candidate in &[secret::QSignerSuite::SPHINCSSHAKE256FSIMPLE] {
+        for item in qss {
+            if item == candidate {
+                sqss = Some(*candidate);
+            }
+        }
+    }
+
+    if shs == None || scs == None || sqcs == None || sss == None || sqss == None {
+        return Err(());
+    }
+
+    Ok((
+        shs.unwrap(),
+        scs.unwrap(),
+        sqcs.unwrap(),
+        sss.unwrap(),
+        sqss.unwrap(),
+    ))
+}
+
+#[derive(Serialize, Deserialize)]
+enum HashSuiteOps {
+    Selected(secret::HashSuite),
+    List(Vec<secret::HashSuite>),
+}
+
+#[derive(Serialize, Deserialize)]
+enum CipherSuiteOps {
+    Selected(secret::CipherSuite),
+    List(Vec<secret::CipherSuite>),
+}
+
+#[derive(Serialize, Deserialize)]
+enum QCipherSuiteOps {
+    Selected(secret::QCipherSuite),
+    List(Vec<secret::QCipherSuite>),
+}
+
+#[derive(Serialize, Deserialize)]
+enum SignerSuiteOps {
+    Selected(secret::SignerSuite),
+    List(Vec<secret::SignerSuite>),
+}
+
+#[derive(Serialize, Deserialize)]
+enum QSignerSuiteOps {
+    Selected(secret::QSignerSuite),
+    List(Vec<secret::QSignerSuite>),
 }
 
 /// Hello message allows to agree cipher suits that will be used to create E2E ephemeral key
@@ -48,22 +136,15 @@ pub struct Hello {
     q_sign_address: Option<String>,
     cipher_address: Option<String>,
     q_cipher_address: Option<String>,
-    hash_suits: CipherSuites,
-    cipher_suits_sign: CipherSuites,
-    cipher_suits_encapsulate: CipherSuites,
-    q_cipher_suits_sign: CipherSuites,
-    q_cipher_suits_encapsulate: CipherSuites,
+    hash_suits: HashSuiteOps,
+    sign_suits: SignerSuiteOps,
+    cipher_suits: CipherSuiteOps,
+    q_sign_suits: QSignerSuiteOps,
+    q_cipher_suits: QCipherSuiteOps,
 }
 
 impl Hello {
-    fn new_request(
-        id: [u8; 32],
-        hash_suite: &[String],
-        cipher_suit_sigh: &[String],
-        cipher_suits_encapsulate: &[String],
-        q_cipher_suits_sign: &[String],
-        q_cipher_suits_encapsulate: &[String],
-    ) -> Hello {
+    fn new_request(id: [u8; 32]) -> Hello {
         Hello {
             id,
             version: VERSION.to_string(),
@@ -71,11 +152,11 @@ impl Hello {
             q_sign_address: None,
             cipher_address: None,
             q_cipher_address: None,
-            hash_suits: CipherSuites::List(hash_suite.to_vec()),
-            cipher_suits_sign: CipherSuites::List(cipher_suit_sigh.to_vec()),
-            cipher_suits_encapsulate: CipherSuites::List(cipher_suits_encapsulate.to_vec()),
-            q_cipher_suits_sign: CipherSuites::List(q_cipher_suits_sign.to_vec()),
-            q_cipher_suits_encapsulate: CipherSuites::List(q_cipher_suits_encapsulate.to_vec()),
+            hash_suits: HashSuiteOps::List(all::<secret::HashSuite>().collect()),
+            sign_suits: SignerSuiteOps::List(all::<secret::SignerSuite>().collect()),
+            cipher_suits: CipherSuiteOps::List(all::<secret::CipherSuite>().collect()),
+            q_sign_suits: QSignerSuiteOps::List(all::<secret::QSignerSuite>().collect()),
+            q_cipher_suits: QCipherSuiteOps::List(all::<secret::QCipherSuite>().collect()),
         }
     }
 
@@ -85,11 +166,11 @@ impl Hello {
         q_sign_address: String,
         cipher_address: String,
         q_cipher_address: String,
-        hash_suite: String,
-        cipher_suit_sigh: String,
-        cipher_suits_encapsulate: String,
-        q_cipher_suits_sign: String,
-        q_cipher_suits_encapsulate: String,
+        hash_suite: secret::HashSuite,
+        signer_suit: secret::SignerSuite,
+        cipher_suits: secret::CipherSuite,
+        q_sign_suits: secret::QSignerSuite,
+        q_cipher_suits: secret::QCipherSuite,
     ) -> Hello {
         Hello {
             id,
@@ -98,11 +179,11 @@ impl Hello {
             cipher_address: Some(cipher_address),
             q_cipher_address: Some(q_cipher_address),
             version: VERSION.to_string(),
-            hash_suits: CipherSuites::Selected(hash_suite),
-            cipher_suits_sign: CipherSuites::Selected(cipher_suit_sigh),
-            cipher_suits_encapsulate: CipherSuites::Selected(cipher_suits_encapsulate),
-            q_cipher_suits_sign: CipherSuites::Selected(q_cipher_suits_sign),
-            q_cipher_suits_encapsulate: CipherSuites::Selected(q_cipher_suits_encapsulate),
+            hash_suits: HashSuiteOps::Selected(hash_suite),
+            sign_suits: SignerSuiteOps::Selected(signer_suit),
+            cipher_suits: CipherSuiteOps::Selected(cipher_suits),
+            q_sign_suits: QSignerSuiteOps::Selected(q_sign_suits),
+            q_cipher_suits: QCipherSuiteOps::Selected(q_cipher_suits),
         }
     }
 
@@ -121,24 +202,57 @@ impl Hello {
                 None => (),
             };
         }
-        for t in [
-            &self.hash_suits,
-            &self.cipher_suits_sign,
-            &self.cipher_suits_encapsulate,
-            &self.q_cipher_suits_sign,
-            &self.q_cipher_suits_encapsulate,
-        ] {
-            match t {
-                CipherSuites::List(set) => {
-                    for i in set.iter() {
-                        size += i.len();
-                    }
+        match &self.hash_suits {
+            HashSuiteOps::List(set) => {
+                for _ in set.iter() {
+                    size += 1;
                 }
-                CipherSuites::Selected(selected) => {
-                    size += selected.len();
+            }
+            HashSuiteOps::Selected(_) => {
+                size += 1;
+            }
+        };
+        match &self.sign_suits {
+            SignerSuiteOps::List(set) => {
+                for i in set.iter() {
+                    size += 1;
                 }
-            };
-        }
+            }
+            SignerSuiteOps::Selected(_) => {
+                size += 1;
+            }
+        };
+        match &self.cipher_suits {
+            CipherSuiteOps::List(set) => {
+                for _ in set.iter() {
+                    size += 1;
+                }
+            }
+            CipherSuiteOps::Selected(_) => {
+                size += 1;
+            }
+        };
+        match &self.q_sign_suits {
+            QSignerSuiteOps::List(set) => {
+                for _ in set.iter() {
+                    size += 1;
+                }
+            }
+            QSignerSuiteOps::Selected(_) => {
+                size += 1;
+            }
+        };
+        match &self.q_cipher_suits {
+            QCipherSuiteOps::List(set) => {
+                for _ in set.iter() {
+                    size += 1;
+                }
+            }
+            QCipherSuiteOps::Selected(_) => {
+                size += 1;
+            }
+        };
+
         size
     }
 }
@@ -162,120 +276,48 @@ impl AsVectorBytes for Hello {
             };
         }
 
-        for t in [
-            &self.hash_suits,
-            &self.cipher_suits_sign,
-            &self.cipher_suits_encapsulate,
-            &self.q_cipher_suits_sign,
-            &self.q_cipher_suits_encapsulate,
-        ] {
-            match t {
-                CipherSuites::List(set) => {
-                    for i in set.iter() {
-                        buf.extend(i.as_bytes());
-                    }
+        match &self.hash_suits {
+            HashSuiteOps::List(set) => {
+                for i in set.iter() {
+                    buf.push(*i as u8);
                 }
-                CipherSuites::Selected(selected) => {
-                    buf.extend(selected.as_bytes());
-                }
-            };
-        }
-
-        buf
-    }
-}
-
-/// PublicKey is a set of ephemeral keys to generate SecretKey used in the future encryption between E2E clients.
-///
-#[derive(Serialize, Deserialize)]
-pub struct PublicKey {
-    name: String,
-    pk_encapsulate: Vec<u8>,
-    pk_sign: Vec<u8>,
-    signature: Vec<u8>,
-    q_pk_encapsulate: Vec<u8>,
-    q_pk_sign: Vec<u8>,
-    q_signature: Vec<u8>,
-}
-
-impl PublicKey {
-    #[inline]
-    fn estimated_size(&self) -> usize {
-        let mut size: usize = self.name.len();
-        size += self.pk_encapsulate.len() + self.pk_sign.len() + self.signature.len();
-        size += self.q_pk_encapsulate.len() + self.q_pk_sign.len() + self.q_signature.len();
-        size
-    }
-}
-
-impl AsVectorBytes for PublicKey {
-    #[inline]
-    fn as_vector_bytes(&self) -> Vec<u8> {
-        let mut buf: Vec<u8> = Vec::with_capacity(self.estimated_size());
-        buf.extend(self.name.as_bytes());
-        buf.extend(self.pk_encapsulate.iter());
-        buf.extend(self.pk_sign.iter());
-        buf.extend(self.signature.iter());
-        buf.extend(self.q_pk_encapsulate.iter());
-        buf.extend(self.q_pk_sign.iter());
-        buf.extend(self.q_signature.iter());
-
-        buf
-    }
-}
-
-/// Secret key is a ciphered message established for the encryption session between E2E clients.
-/// All the future messages are encrypted with the SecretKey.
-///
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SecretKeyCiphered {
-    handshake_hash: Vec<u8>,
-    ciphertext: Vec<u8>,
-    signature: Vec<u8>,
-    q_signature: Vec<u8>,
-    address: String,
-    q_address: String,
-}
-
-impl SecretKeyCiphered {
-    pub fn from_ciphers_with_secret<
-        ED: EncapsulatorDecapsulator + AddressReader,
-        ECDC: EncryptorDecryptor + AddressReader,
-        SA: Signer + AddressReader,
-        D: Digest + FixedOutput + Copy,
-    >(
-        handshake_data: &[u8],
-        cipher_public_key: String,
-        q_cipher_public_key: String,
-        hasher: &D,
-        cipher: &ECDC,
-        q_cipher: &ED,
-        signer: &SA,
-        q_signer: &SA,
-    ) -> Option<(SecretKeyCiphered, Vec<u8>)> {
-        if let Ok((ss, ct)) = q_cipher.encapsulate_shared_key(q_cipher_public_key) {
-            if let Ok(ciphertext) = cipher.encrypt(cipher_public_key, &ct) {
-                let signature = signer.sign(&ciphertext[..]);
-                let q_signature = q_signer.sign(&ciphertext[..]);
-                let _ = hasher.chain_update(handshake_data);
-                let _ = hasher.chain_update(signer.address().as_bytes());
-                let _ = hasher.chain_update(q_signer.address().as_bytes());
-                let handshake_hash = hasher.finalize().as_slice().to_vec();
-                return Some((
-                    SecretKeyCiphered {
-                        handshake_hash,
-                        ciphertext: ciphertext,
-                        signature,
-                        q_signature,
-                        address: signer.address(),
-                        q_address: q_signer.address(),
-                    },
-                    ss,
-                ));
             }
-        }
+            HashSuiteOps::Selected(selected) => buf.push(*selected as u8),
+        };
+        match &self.sign_suits {
+            SignerSuiteOps::List(set) => {
+                for i in set.iter() {
+                    buf.push(*i as u8);
+                }
+            }
+            SignerSuiteOps::Selected(selected) => buf.push(*selected as u8),
+        };
+        match &self.cipher_suits {
+            CipherSuiteOps::List(set) => {
+                for i in set.iter() {
+                    buf.push(*i as u8);
+                }
+            }
+            CipherSuiteOps::Selected(selected) => buf.push(*selected as u8),
+        };
+        match &self.q_sign_suits {
+            QSignerSuiteOps::List(set) => {
+                for i in set.iter() {
+                    buf.push(*i as u8);
+                }
+            }
+            QSignerSuiteOps::Selected(selected) => buf.push(*selected as u8),
+        };
+        match &self.q_cipher_suits {
+            QCipherSuiteOps::List(set) => {
+                for i in set.iter() {
+                    buf.push(*i as u8);
+                }
+            }
+            QCipherSuiteOps::Selected(selected) => buf.push(*selected as u8),
+        };
 
-        None
+        buf
     }
 }
 
@@ -288,79 +330,24 @@ enum Position {
     SharedKey,
 }
 
-/// Describes which precedence to choose.
-///
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum Precedence {
-    Hash,
-    Signer,
-    Cipher,
-    QSigner,
-    QCipher,
-}
-
-// TODO: refactor this to get vector of highest ranking protocols in decreasing order.
-impl Precedence {
-    fn get_precedence(&self) -> String {
-        match *self {
-            Precedence::Hash => HASH_SUIT.to_owned(),
-            Precedence::Cipher => CIPHER_ENCAPSULATION_SUIT.to_owned(),
-            Precedence::Signer => CIPHER_SING_SUIT.to_owned(),
-            Precedence::QCipher => Q_CIPHER_ENCAPSULATION_SUIT.to_owned(),
-            Precedence::QSigner => Q_CIPHER_SING_SUIT.to_owned(),
-        }
-    }
-}
-
 /// State contains handshake state and agreed cryptography and post-quantum cryptography protocols.
 /// The task of this entity is to create SecretKey that is in further use to encrypt data exchange between E2E clients.
 ///
-#[derive(Debug, Clone)]
-pub struct State<SV, ED, ECDC, D>
-where
-    SV: Signer + Verifier + AddressReader + Copy,
-    ED: EncapsulatorDecapsulator + AddressReader + Copy,
-    ECDC: EncryptorDecryptor + AddressReader + Copy,
-    D: Digest + OutputSizeUser + FixedOutput + Copy,
-{
+pub struct State {
     id: Option<[u8; 32]>,
     position: Position,
-    selected_hasher: Option<String>,
-    selected_signer: Option<String>,
-    selected_q_signer: Option<String>,
-    selected_encapsulator: Option<String>,
-    selected_q_encapsulator: Option<String>,
-    hashers: HashMap<String, D>,
-    signers: HashMap<String, SV>,
-    q_signers: HashMap<String, SV>,
-    encapsulators: HashMap<String, ECDC>,
-    q_encapsulators: HashMap<String, ED>,
+    cipher_creator: Option<secret::CipherCreator>,
     handshake_data: Vec<u8>,
 }
 
-impl<SV, ED, ECDC, D> State<SV, ED, ECDC, D>
-where
-    SV: Signer + Verifier + AddressReader + Copy,
-    ED: EncapsulatorDecapsulator + AddressReader + Copy,
-    ECDC: EncryptorDecryptor + AddressReader + Copy,
-    D: Digest + OutputSizeUser + FixedOutput + Copy,
-{
+impl State {
     /// Creates new Assignation entity with empty Cipher Suits.
     ///
-    pub fn new() -> State<SV, ED, ECDC, D> {
+    pub fn new() -> State {
         State {
             id: None,
             position: Position::Reset,
-            selected_hasher: None,
-            selected_signer: None,
-            selected_q_signer: None,
-            selected_encapsulator: None,
-            selected_q_encapsulator: None,
-            hashers: HashMap::new(),
-            signers: HashMap::new(),
-            q_signers: HashMap::new(),
-            encapsulators: HashMap::new(),
-            q_encapsulators: HashMap::new(),
+            cipher_creator: None,
             handshake_data: Vec::new(),
         }
     }
@@ -371,79 +358,21 @@ where
     ///
     pub fn reset(&mut self) {
         self.id = None;
-        self.selected_hasher = None;
-        self.selected_signer = None;
-        self.selected_q_signer = None;
-        self.selected_encapsulator = None;
-        self.selected_q_encapsulator = None;
+        self.cipher_creator = None;
         self.handshake_data = Vec::new();
+        self.position = Position::Reset;
     }
 
-    /// Sets hasher cipher suit.
+    /// Create hello with proposed protocols for the handshake.
     ///
-    pub fn set_hasher(&mut self, name: String, d: D) -> Result<(), ErrorState> {
-        if self.hashers.contains_key(&name) {
-            return Err(ErrorState::EntityAlreadyExists);
-        }
-        let _ = self.hashers.insert(name, d);
-
-        Ok(())
-    }
-
-    /// Sets signer for pre-quantum cryptography cipher suit.
-    ///
-    pub fn set_signer(&mut self, name: String, s: SV) -> Result<(), ErrorState> {
-        if self.signers.contains_key(&name) {
-            return Err(ErrorState::EntityAlreadyExists);
-        }
-        let _ = self.signers.insert(name, s);
-
-        Ok(())
-    }
-
-    /// Sets signer for post-quantum cryptography cipher suit.
-    ///
-    pub fn set_q_signer(&mut self, name: String, s: SV) -> Result<(), ErrorState> {
-        if self.q_signers.contains_key(&name) {
-            return Err(ErrorState::EntityAlreadyExists);
-        }
-        let _ = self.q_signers.insert(name, s);
-
-        Ok(())
-    }
-
-    /// Sets encapsulator for pre-quantum cryptography cipher suit.
-    ///
-    pub fn set_encapsulator(&mut self, name: String, ecdc: ECDC) -> Result<(), ErrorState> {
-        if self.encapsulators.contains_key(&name) {
-            return Err(ErrorState::EntityAlreadyExists);
-        }
-        let _ = self.encapsulators.insert(name, ecdc);
-
-        Ok(())
-    }
-
-    /// Sets encapsulator for post-quantum cryptography cipher suit.
-    ///
-    pub fn set_q_encapsulator(&mut self, name: String, ed: ED) -> Result<(), ErrorState> {
-        if self.q_encapsulators.contains_key(&name) {
-            return Err(ErrorState::EntityAlreadyExists);
-        }
-        let _ = self.q_encapsulators.insert(name, ed);
-
-        Ok(())
-    }
-
-    /// Create hello with proposed protocols for the handshake stage 1.
-    ///
-    pub fn hello_propose(&mut self) -> Option<Hello> {
+    pub fn hello_propose(&mut self) -> Result<Hello, ()> {
         if self.position != Position::Reset {
-            return None;
+            return Err(());
         }
 
         let id_slice = random_hash();
         if id_slice.len() != 32 {
-            return None;
+            return Err(());
         }
 
         let mut id_arr: [u8; 32] = [0u8; 32];
@@ -452,186 +381,73 @@ where
             id_arr[i] = id_slice[i];
         }
 
-        let mut hash_suite: Vec<String> = Vec::new();
-        let mut cipher_suit_sigh: Vec<String> = Vec::new();
-        let mut cipher_suits_encapsulate: Vec<String> = Vec::new();
-        let mut q_cipher_suits_sign: Vec<String> = Vec::new();
-        let mut q_cipher_suits_encapsulate: Vec<String> = Vec::new();
-
-        for (k, _) in self.hashers.iter() {
-            hash_suite.push(k.to_string());
-        }
-        for (k, _) in self.signers.iter() {
-            cipher_suit_sigh.push(k.to_string());
-        }
-        for (k, _) in self.encapsulators.iter() {
-            cipher_suits_encapsulate.push(k.to_string());
-        }
-        for (k, _) in self.q_signers.iter() {
-            q_cipher_suits_sign.push(k.to_string());
-        }
-        for (k, _) in self.q_encapsulators.iter() {
-            q_cipher_suits_encapsulate.push(k.to_string());
-        }
-
-        let hello = Hello::new_request(
-            id_arr,
-            &hash_suite,
-            &cipher_suit_sigh,
-            &cipher_suits_encapsulate,
-            &q_cipher_suits_sign,
-            &q_cipher_suits_encapsulate,
-        );
-
         self.id = Some(id_arr);
         self.position = Position::Hello;
+
+        let hello = Hello::new_request(id_arr);
+
         self.handshake_data.extend(hello.as_vector_bytes());
 
-        Some(hello)
+        Ok(hello)
     }
 
-    /// Selects protocols.
-    ///
-    pub fn hello_select(&mut self, hello: &Hello) -> Option<Hello> {
+    pub fn hello_select(&mut self, hello: &Hello) -> Result<Hello, ()> {
         if self.position != Position::Reset {
-            return None;
+            return Err(());
         }
 
-        let hash = Precedence::Hash.get_precedence();
-        let cipher = Precedence::Cipher.get_precedence();
-        let signer = Precedence::Signer.get_precedence();
-        let q_cipher = Precedence::QCipher.get_precedence();
-        let q_signer = Precedence::QSigner.get_precedence();
-
-        if let CipherSuites::List(v) = &hello.hash_suits {
-            if !v.contains(&hash) {
-                return None;
-            }
-        }
-        if let CipherSuites::List(v) = &hello.cipher_suits_encapsulate {
-            if !v.contains(&cipher) {
-                return None;
-            }
-        }
-        if let CipherSuites::List(v) = &hello.cipher_suits_sign {
-            if !v.contains(&signer) {
-                return None;
-            }
-        }
-        if let CipherSuites::List(v) = &hello.q_cipher_suits_encapsulate {
-            if !v.contains(&q_cipher) {
-                return None;
-            }
-        }
-        if let CipherSuites::List(v) = &hello.q_cipher_suits_sign {
-            if !v.contains(&q_signer) {
-                return None;
-            }
+        let mut hs: secret::HashSuite = secret::HashSuite::Sha3_512;
+        if let HashSuiteOps::Selected(hasher) = hello.hash_suits {
+            hs = hasher;
+        } else {
+            return Err(());
         }
 
-        self.selected_hasher = Some(hash.clone());
-        self.selected_signer = Some(signer.clone());
-        self.selected_encapsulator = Some(cipher.clone());
-        self.selected_q_signer = Some(q_signer.clone());
-        self.selected_q_encapsulator = Some(q_cipher.clone());
+        let mut ss: secret::SignerSuite = secret::SignerSuite::ED25519;
+        if let SignerSuiteOps::Selected(signer) = hello.sign_suits {
+            ss = signer;
+        } else {
+            return Err(());
+        }
+
+        let mut qss: secret::QSignerSuite = secret::QSignerSuite::SPHINCSSHAKE256FSIMPLE;
+        if let QSignerSuiteOps::Selected(signer) = hello.q_sign_suits {
+            qss = signer;
+        } else {
+            return Err(());
+        }
+
+        let mut cs: secret::CipherSuite = secret::CipherSuite::RSA2048;
+        if let CipherSuiteOps::Selected(cipher) = hello.cipher_suits {
+            cs = cipher;
+        } else {
+            return Err(());
+        }
+        let mut qcs: secret::QCipherSuite = secret::QCipherSuite::KYBER1024;
+        if let QCipherSuiteOps::Selected(cipher) = hello.q_cipher_suits {
+            qcs = cipher;
+        } else {
+            return Err(());
+        }
+
+        self.cipher_creator = Some(secret::CipherCreator::with_params(hs, cs, ss, qcs, qss)?);
+        let (s, qs, c, qc) = self.cipher_creator.as_ref().unwrap().addresses();
+
+        let hello_response = Hello::new_response(hello.id, s, qs, c, qc, hs, ss, cs, qss, qcs);
+
+        self.handshake_data.extend(hello.as_vector_bytes());
+        self.handshake_data.extend(hello_response.as_vector_bytes());
         self.position = Position::Hello;
         self.id = Some(hello.id);
-        self.handshake_data.extend(&hello.as_vector_bytes());
 
-        let hello_response = Hello::new_response(
-            hello.id,
-            hello.sign_address.clone()?,
-            hello.q_sign_address.clone()?,
-            hello.cipher_address.clone()?,
-            hello.q_cipher_address.clone()?,
-            hash.clone(),
-            signer.to_owned(),
-            cipher.to_owned(),
-            q_signer.to_owned(),
-            q_cipher.to_owned(),
-        );
-
-        self.handshake_data.extend(hello_response.as_vector_bytes());
-
-        Some(hello_response)
+        Ok(hello_response)
     }
+}
 
-    pub fn hello_selected_to_cipher(
-        &mut self,
-        hello: &Hello,
-    ) -> Option<(SecretKeyCiphered, Vec<u8>)> {
-        if self.position != Position::Hello {
-            return None;
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-        self.handshake_data.extend(hello.as_vector_bytes());
-
-        if let CipherSuites::Selected(hash) = hello.hash_suits.borrow() {
-            if let Some(_) = self.hashers.get(hash) {
-                self.selected_hasher = Some(hash.clone());
-            } else {
-                return None;
-            }
-        } else {
-            return None;
-        }
-
-        if let CipherSuites::Selected(signer) = hello.cipher_suits_sign.borrow() {
-            if let Some(_) = self.signers.get(signer) {
-                self.selected_signer = Some(signer.clone());
-            } else {
-                return None;
-            }
-        } else {
-            return None;
-        }
-
-        if let CipherSuites::Selected(signer) = hello.q_cipher_suits_sign.borrow() {
-            if let Some(_) = self.q_signers.get(signer) {
-                self.selected_q_signer = Some(signer.clone());
-            } else {
-                return None;
-            }
-        } else {
-            return None;
-        }
-
-        if let CipherSuites::Selected(cipher) = hello.cipher_suits_encapsulate.borrow() {
-            if let Some(_) = self.encapsulators.get(cipher) {
-                self.selected_signer = Some(cipher.clone());
-            } else {
-                return None;
-            }
-        } else {
-            return None;
-        }
-
-        if let CipherSuites::Selected(cipher) = hello.q_cipher_suits_encapsulate.borrow() {
-            if let Some(_) = self.q_encapsulators.get(cipher) {
-                self.selected_encapsulator = Some(cipher.clone());
-            } else {
-                return None;
-            }
-        } else {
-            return None;
-        }
-
-        self.position = Position::SharedKey;
-
-        let ca = hello.cipher_address.clone()?;
-        let q_ca = hello.q_cipher_address.clone()?;
-
-        SecretKeyCiphered::from_ciphers_with_secret(
-            &self.handshake_data,
-            ca,
-            q_ca,
-            self.hashers.get(&self.selected_hasher.clone()?)?,
-            self.encapsulators
-                .get(&self.selected_encapsulator.clone()?)?,
-            self.q_encapsulators
-                .get(&self.selected_q_encapsulator.clone()?)?,
-            self.signers.get(&self.selected_signer.clone()?)?,
-            self.q_signers.get(&self.selected_q_signer.clone()?)?,
-        )
-    }
+    #[test]
+    fn fool_successful_handshake() {}
 }

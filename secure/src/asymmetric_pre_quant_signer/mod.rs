@@ -1,3 +1,4 @@
+use crate::globals::SignerVerifierAddressReader;
 use crate::globals::{AddressReader, ErrorSignerVerifier, Signer, Verifier};
 use ed25519_dalek::ed25519::SignatureBytes;
 use ed25519_dalek::Digest;
@@ -108,6 +109,8 @@ impl Verifier for SignerWallet {
         Err(ErrorSignerVerifier::InvalidSignature)
     }
 }
+
+impl SignerVerifierAddressReader for SignerWallet {}
 
 #[cfg(test)]
 mod tests {

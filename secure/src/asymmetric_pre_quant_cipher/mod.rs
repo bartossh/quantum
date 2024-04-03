@@ -1,4 +1,6 @@
-use crate::globals::{AddressReader, EncryptorDecryptor, ErrorEncryptDecrypter};
+use crate::globals::{
+    AddressReader, EncryptorDecryptor, EncryptorDecryptorAddressReader, ErrorEncryptDecrypter,
+};
 use rand::thread_rng;
 use rsa::{
     pkcs1::{DecodeRsaPublicKey, EncodeRsaPublicKey},
@@ -77,6 +79,8 @@ impl EncryptorDecryptor for CipherWallet {
         Err(ErrorEncryptDecrypter::InvalidPublicKey)
     }
 }
+
+impl EncryptorDecryptorAddressReader for CipherWallet {}
 
 #[cfg(test)]
 mod tests {
