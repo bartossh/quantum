@@ -1,5 +1,5 @@
-use crate::globals::AddressReader;
-use crate::globals::{EncapsulatorDecapsulator, ErrorEncapsulateDecapsulate};
+use crate::globals::{AddressReader, EncapsulatorDecapsulatorAddressReader};
+use crate::globals::{EncapsulatorDecapsulator, ErrorSecure};
 use pqcrypto::kem::kyber1024::{
     decapsulate, encapsulate, keypair, Ciphertext, PublicKey, SecretKey,
 };
@@ -25,13 +25,10 @@ impl SharedKeyGeneratorWallet {
 }
 
 impl EncapsulatorDecapsulator for SharedKeyGeneratorWallet {
-    fn encapsulate_shared_key(
-        &self,
-        address: String,
-    ) -> Result<(Vec<u8>, Vec<u8>), ErrorEncapsulateDecapsulate> {
+    fn encapsulate_shared_key(&self, address: String) -> Result<(Vec<u8>, Vec<u8>), ErrorSecure> {
         if let Ok(decoded) = bs58::decode(address).into_vec() {
             if !decoded[0..2].eq(VERSION) {
-                return Err(ErrorEncapsulateDecapsulate::InvalidPublicKey);
+                return Err(ErrorSecure::InvalidPublicKey);
             }
             let pub_key: Result<PublicKey, Error> = PublicKey::from_bytes(&decoded[2..]);
             match pub_key {
@@ -39,22 +36,19 @@ impl EncapsulatorDecapsulator for SharedKeyGeneratorWallet {
                     let (ss, ct) = encapsulate(&p);
                     return Ok((ss.as_bytes().to_vec(), ct.as_bytes().to_vec()));
                 }
-                Err(_) => return Err(ErrorEncapsulateDecapsulate::InvalidPublicKey),
+                Err(_) => return Err(ErrorSecure::InvalidPublicKey),
             }
         }
-        Err(ErrorEncapsulateDecapsulate::InvalidPublicKey)
+        Err(ErrorSecure::InvalidPublicKey)
     }
-    fn decapsulate_shared_key(
-        &self,
-        cipher: &[u8],
-    ) -> Result<Vec<u8>, ErrorEncapsulateDecapsulate> {
+    fn decapsulate_shared_key(&self, cipher: &[u8]) -> Result<Vec<u8>, ErrorSecure> {
         let c = Ciphertext::from_bytes(&cipher);
         match c {
             Ok(ct) => {
                 let ss = decapsulate(&ct, &self.sk);
                 return Ok(ss.as_bytes().to_vec());
             }
-            Err(_) => return Err(ErrorEncapsulateDecapsulate::InvalidCipher),
+            Err(_) => return Err(ErrorSecure::InvalidCipher),
         }
     }
 }
@@ -69,6 +63,8 @@ impl AddressReader for SharedKeyGeneratorWallet {
         enc.into_string()
     }
 }
+
+impl EncapsulatorDecapsulatorAddressReader for SharedKeyGeneratorWallet {}
 
 #[cfg(test)]
 mod tests {

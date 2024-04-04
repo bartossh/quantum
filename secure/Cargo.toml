@@ -1,5 +1,5 @@
 [package]
-name = "crypto"
+name = "secure"
 version = "0.1.0"
 edition = "2021"
 
@@ -11,11 +11,12 @@ name = "benchmarks"
 harness = false
 
 [dependencies]
-sha2 = "0.10.8"
+sha3 = "0.10.8"
 rand = { version = "0.8.5", features = ["std", "std_rng"] }
 rand_core = "0.6.4"
 rsa = { version = "0.9.6", feature = "sha2" }
 ed25519-dalek = { version = "2.1.1", features = ["rand_core", "digest"] }
+crypto = { version = "0.5.1", feature = "digest" }
 pqcrypto = "0.17.0"
 pqcrypto-traits = "0.3.5"
 chrono = "*"
@@ -26,6 +27,8 @@ bs58 = "0.5.1"
 serde = "1.0.*"
 serde_json = "1.0"
 digest = "0.10.7"
+len-trait = "0.6.1"
+enum-iterator = "2.0.0"
 
 [profile.test]
 # Enable optimizations for tests

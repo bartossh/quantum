@@ -1,4 +1,4 @@
 [workspace]
 
-members = ["server", "client", "crypto"]
+members = ["server", "client", "secure"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

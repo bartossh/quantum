@@ -1,56 +1,175 @@
 use crate::globals::{AddressReader, AsVectorBytes};
 use crate::globals::{Signer, Verifier};
+use len_trait::len::{Empty, Len};
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
+/// Address holds pre and post quantum addresses.
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Address {
+    pre_quantum: String,
+    post_quantum: String,
+}
+
+impl Address {
+    #[inline(always)]
+    pub fn from_address_reader(pre: &dyn AddressReader, post: &dyn AddressReader) -> Address {
+        Address {
+            pre_quantum: pre.address(),
+            post_quantum: post.address(),
+        }
+    }
+
+    #[inline(always)]
+    pub fn get_pre_quantum(&self) -> String {
+        self.pre_quantum.clone()
+    }
+
+    #[inline(always)]
+    pub fn get_post_quantum(&self) -> String {
+        self.post_quantum.clone()
+    }
+}
+
+impl Empty for Address {
+    #[inline(always)]
+    fn is_empty(&self) -> bool {
+        if self.pre_quantum.len() == 0 || self.post_quantum.len() == 0 {
+            return true;
+        }
+        false
+    }
+}
+
+impl Len for Address {
+    #[inline(always)]
+    fn len(&self) -> usize {
+        self.pre_quantum.len() + self.post_quantum.len()
+    }
+}
+
+impl AsVectorBytes for Address {
+    #[inline(always)]
+    fn as_vector_bytes(&self) -> Vec<u8> {
+        let mut bytes = self.pre_quantum.as_bytes().to_vec();
+        bytes.extend(self.post_quantum.as_bytes());
+
+        bytes
+    }
+}
+
+/// Signature holds per and post quantum signature
+#[derive(Serialize, Deserialize, Clone)]
+struct Signature {
+    pre_quantum: Vec<u8>,
+    post_quantum: Vec<u8>,
+}
+
+impl Signature {
+    #[inline(always)]
+    pub fn new() -> Signature {
+        Signature {
+            pre_quantum: Vec::new(),
+            post_quantum: Vec::new(),
+        }
+    }
+
+    #[inline(always)]
+    pub fn update(&mut self, pre: &[u8], post: &[u8]) {
+        self.pre_quantum = pre.to_vec();
+        self.post_quantum = post.to_vec();
+    }
+
+    #[inline(always)]
+    pub fn get_pre_quantum(&self) -> &[u8] {
+        &self.pre_quantum
+    }
+
+    #[inline(always)]
+    pub fn get_post_quantum(&self) -> &[u8] {
+        &self.post_quantum
+    }
+}
+
 /// Transaction contains all the data required for data to represent legally sealed data.
 ///
-
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Transaction {
     subject: String,
     data: Vec<u8>,
     created_at: u128,
-    issuer: String,
-    receiver: String,
-    issuer_sig: Vec<u8>,
-    receiver_sig: Vec<u8>,
+    issuer: Address,
+    receiver: Address,
+    issuer_sig: Signature,
+    receiver_sig: Signature,
 }
 
 impl Transaction {
     /// Issues the transaction signing it with issuer.
-    pub fn issue<T: Signer + AddressReader>(
-        issuer: T,
+    ///
+    #[inline]
+    pub fn issue<T: Signer + AddressReader, D: Signer + AddressReader>(
+        pre_q_issuer: &T,
+        post_q_issuer: &D,
         subject: String,
-        data: &Vec<u8>,
-        receiver: String,
+        data: Vec<u8>,
+        receiver: Address,
     ) -> Transaction {
         let created_at = Instant::now().elapsed().as_nanos();
-        let mut trx = Transaction {
+        let mut trx: Transaction = Transaction {
             subject,
             data: data.clone(),
             created_at,
-            issuer: issuer.address(),
+            issuer: Address::from_address_reader(pre_q_issuer, post_q_issuer),
             receiver,
-            issuer_sig: Vec::new(),
-            receiver_sig: Vec::new(),
+            issuer_sig: Signature::new(),
+            receiver_sig: Signature::new(),
         };
-        trx.issuer_sig = issuer.sign(&trx.as_vector_bytes());
+
+        let trx_bytes = trx.as_vector_bytes();
+        trx.issuer_sig.update(
+            &pre_q_issuer.sign(&trx_bytes),
+            &post_q_issuer.sign(&trx_bytes),
+        );
 
         trx
     }
 
     /// Approves the transactions siging it by the receiver.
-    pub fn approve(&mut self, receiver: &dyn Signer) {
-        self.receiver_sig = receiver.sign(&self.as_vector_bytes());
+    ///
+    #[inline(always)]
+    pub fn approve(
+        &mut self,
+        pre_quantum_receiver: &dyn Signer,
+        post_quantum_receiver: &dyn Signer,
+    ) {
+        let trx_bytes = self.as_vector_bytes();
+        self.receiver_sig.update(
+            &pre_quantum_receiver.sign(&trx_bytes),
+            &post_quantum_receiver.sign(&trx_bytes),
+        );
     }
 
     /// Validate transaction against issuer signature.
-    pub fn validate_for_issuer(&self, validator: &dyn Verifier) -> bool {
-        if let Err(_) = validator.validate_other(
-            &self.as_vector_bytes(),
-            &self.issuer_sig,
-            self.issuer.as_ref(),
+    ///
+    #[inline(always)]
+    pub fn validate_for_issuer(
+        &self,
+        pre_validator: &dyn Verifier,
+        post_validator: &dyn Verifier,
+    ) -> bool {
+        let trx_bytes = &self.as_vector_bytes();
+        if let Err(_) = pre_validator.validate_other(
+            &trx_bytes,
+            &self.issuer_sig.get_pre_quantum(),
+            &self.issuer.get_pre_quantum(),
+        ) {
+            return false;
+        }
+        if let Err(_) = post_validator.validate_other(
+            &trx_bytes,
+            &self.issuer_sig.get_post_quantum(),
+            &self.issuer.get_post_quantum(),
         ) {
             return false;
         }
@@ -59,11 +178,24 @@ impl Transaction {
     }
 
     /// Validate transaction against receiver signature.
-    pub fn validate_for_receiver(&self, validator: &dyn Verifier) -> bool {
-        if let Err(_) = validator.validate_other(
-            &self.as_vector_bytes(),
-            &self.receiver_sig,
-            self.receiver.as_ref(),
+    #[inline(always)]
+    pub fn validate_for_receiver(
+        &self,
+        pre_validator: &dyn Verifier,
+        post_validator: &dyn Verifier,
+    ) -> bool {
+        let trx_bytes = &self.as_vector_bytes();
+        if let Err(_) = pre_validator.validate_other(
+            &trx_bytes,
+            &self.receiver_sig.get_pre_quantum(),
+            &self.receiver.get_pre_quantum(),
+        ) {
+            return false;
+        }
+        if let Err(_) = post_validator.validate_other(
+            &trx_bytes,
+            &self.receiver_sig.get_post_quantum(),
+            &self.receiver.get_post_quantum(),
         ) {
             return false;
         }
@@ -90,8 +222,8 @@ impl AsVectorBytes for Transaction {
         buffer.extend(self.subject.as_bytes());
         buffer.extend(&self.data);
         buffer.extend(&self.created_at.to_ne_bytes());
-        buffer.extend(self.issuer.as_bytes());
-        buffer.extend(self.receiver.as_bytes());
+        buffer.extend(self.issuer.as_vector_bytes());
+        buffer.extend(self.receiver.as_vector_bytes());
 
         buffer
     }
@@ -100,8 +232,11 @@ impl AsVectorBytes for Transaction {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::asymmetric_pre_quant_signer::SignerWallet as PreQuantSignerWallet;
     use crate::{asymmetric_quant_signer::SignerWallet, globals::AddressReader};
     use std::{thread, time};
+
+    #[derive(Clone, Copy)]
     struct SignerMock {}
 
     impl Signer for SignerMock {
@@ -120,7 +255,13 @@ mod tests {
     fn as_vec_bytes() {
         let data = "pucy6qnk6pmg6ttul0hbl6xzgxh6dfjceqcs9tewxr2jjrtdhotzi1a03pvqibj2eilft8mwdlwz986/8wwci6cx1zz0ly1t+ehjn7sphpoov4u71yroln9jdevok5olzwgiy6adoxynabrumaupidkfjcbwsgalejm/y9ly/r3z1y5vou6cz/rd6v+dmpch9jjcqncaj0zp/+4pisdbwmegzwadiyfi6ignhicywtvbty4pqkcpjvebgmufilfl+uny1gjvqajac941bx5tfl+dphcuxg3ztpajdx0tfmk5vqhqvzjuo3oplpn4iqfnv7itukbdudcpcqctiyy23nzdreldzlhxr33nurhm6mx4hn2ygnk3aiam1jrnhhusiweqggbkcrqgeehv4ge/j2x8o1gfkocl+2kl+ztlhs5eiiqojypux4x8ewslspbdqb7ckskmnmemgyq0gvqh75crqduwdrs+z/jl0didrwnhbtuvak41+nhn1yejvo+qepejatanqajkw+tst4ia/3rdv46oz6dvqroowiacgpwqtebpo4fcrzc3vrz/flczk92s7kkiulr1eiomy2fybzwmlefckk1i/elinchnusffspwlhzkf/gqpyuhsf6we2yvljgztjjpfkg8wbelttaqo3d1hwkew3jehvuqwrw49lvowqgtzfj0mcuypu8qeuuckkjyu+uzd1u9+nusnznuz+jqf1wubqq1galom+tlipswle9ypbgi7krmvbch93el22oidynt+zdeikaa053jvwmren2lhj85f189ziw2wbybxk0htqgwxxw/zhzqxjhjs3pwkhrxdf/35m2fwxoefixkvdqixhqko7kwsnwmv2iumsodlb2lihbjpu6ruzeao6mqvrrrn9ljw9dudgjhs4u/odpoqobyrvxixoqw0uylnj18tossvdh0dvldayk+f9kfsevofgihhpg3qae9zwu3ixtvdv+9sv0tsyoqkbamrxfwimiqwzfznzaxpd/70rdcwpijzpv9nf9km38cdpivbr8fj0nb/jiv2wsevw0s9gfwmsfhcsqfg+jpuwr2ljmq/urtvyp9ainqc8xfcosc74iwqc7fdywni5149bybandldaq6uax75kuwmmxtpjbmgbiusf89d+njyakzdz/n6dqfjun7rlbrfmlczjem24imhqmd94pzyhvw66flub/g4e+u/wka7xwwawpmxlh3xed1cyvhiyqodp7ydk4blwylczd5ufb7pqrp7idnro8srp7p+qusrowqsu9br7suubreyyzdhntja7eqmcdwvxae32/b1tbtqxy2jovqepo1eeg/sb3nl1hlrefcy0aeysvkxo4akicigw36bthjkq5rauv6136tcvma+u/ey4doeoiyduj+zhlkwnlwz97sz6xd8s3pgyecvkpnnzph77bz5tqp6iidk/b8yyf6purwakmg24l65lnorusekjwpnnajuhjdt2tqypejnkx5yxwi/gvbdrgpchp6r6fooufhoeurxljhanhb3cdyffmg6ncvz8h/e+twizlobs3wilyi/wq4tupo7tbdhjlfquiwabunbcpxkiyheejqdqbonclb8bkaof01uspzkjhnzfhvv/ghzozjjevnlivmbi2untllwcundl8lxhyg2/kdgtum2jjsqgmxmycdbc7cythanmfoci7rbqf+hrfpvazgwyxixbe3dzcpsy/917utn6f7wuiazlg/0geot8aa6urgru+309hpd0mxqo1voi/d/8aoizcmld5ioqokryxiufz6hkqs4xxjv98n/jgjvtck26bnibqmapigzmafkxauswh23wvqbnzyz3h3yrz2g6gcv12urg4olm1h5lhxvehklcwgtxznndq7iexqey9quaymgcy1zojjhtqogynj9lwjmwv1tdcaqwnw/osconakide7inqs6rd2qg4dfudkztvpe31ekaefoicyuxee7gxwybzchc/1g+jj0wjatly82k/+/kj/k5+7ympirtd2mcunjg+gpnxygxhl+m5w8rizjcb/lp0kuoyvrjsrardyabthb4emvfgn0m7tebx3dautu+viwfymgbng64vqxqkrf4icu1ckuhzahlw17xjpzcmtyafe1yoechwgb4+xps/tcktft1u30wema5uoajtrrsuuqo6x7/vdsrw2/o+xezgtooxfooq3xqo9m88qyzdnk39yo7+e8owx5vwqi2xwvezm5avq1/yic72rsj37v9z/gojowpdfaivjzgdzxr7csxnywkgptq3jlx6cb10q9an5etrw2t4zodft5ggair6yvakv62r5e41ldcxhr1v6jljgyrh6hegdigpu7baa1kxu4efxz2vwitznwxhn3fginowqy2sdtnxbxx9/z8ixtnvdsddlr2gmaenu9a93e0da8xyokfzo1g0zsdpxqbzq47egbkl49srrvat9nc7uckqycemmgsyhvgo8n9qtxhduuzmfviiesshtuxfwkbky2eko/fwbzrukd1vbbe9ajo30ygfkwrlowzyw+r9z16vuqckavaln2tbzmeff3z06f2+aflar7ildq7p0mvvy+gwkje5f2gaa0ahczyhmffp6yzmokljrnto6x6gbjmviyp21fcjphlyiskodrwcvvqdaa/tegvqqwuqqwur9aes/ahpzsjutsybc+nreg18rvc41j1alcebjiridbjj1p3g4f4nw6/ldcp4rajmj+xd1cogxpqooisnoca6yys42sjojd8jwsqshb8got9s38sa73e8xn50yxdo7gzxbiroru64z9a7qvsesx6kulls6tercoi8sjckhggxnjag5lrhkx2vmmzqaca1gppybcylem3tn0btkgln/vuzjr0fl7pwxphwjcn7jxpqcqr5wbhm8dvc0csod7ush3de89qwr4wbawvkx0jp5wryw9+e8nj9pm35twuvi1r14wwhzrsmjyezg4za2xjsn8lmy/+/j13iigpcnbtemjy376uz76bhtirqntzjvjcjhzxb2czuzc2fqr4ncypodztcndybh+xoew/wxstrlbu31bke2vbybcidfxkx/iioqlx8f+yooe5xv8qb1miwckokpywbaqcri5hmq7wwes2fhijf4ls8ex02psfkk5yct8we1r5a9mmbmqx43acpxcd5gboguyfzrvyxfmyxftf4hnsiljhxv7owawheoyiokxkmot/sg99fqc10jo9/wfktmgwmz7l9rh+ocshflmfh1yqjq1cfbsz0yz6w+xapt7za3ekcuzyvwj/f2g4o1vi5l2ymhbg/tt68lzmmjidbfbo431rndujfwnungyne2bbrf/cj9njopno6wzonbla4fcfzhwbgtilc81zroqimvbynb1szdgqbkkltuvzc1msdexngcluir5l6ggo8ncsrgfzprxhtjz6ryh1b3prgr/sf0vuk0rqz+/zduu6ory0sdhwmnfimmcczrmfkpucsnxihbd1vxoyicmmhhedmnayvpbf88p3wpiu22ob0xf2en3rslpndlg2ajid3mzegoggtyvrxtraxk8mrqwuofmgatvbvz4tiaf1vl4yhkabicfhuy4fc+ej1edszvfzpehuly7/lrd0glr+xnppghdljdurus7apozk3ubfllomlbwcbfokkdywmxrftxn4mlppc9jexaxb38ltonae/brrnw589t+h42jzrxfejzafbg7ovt95vjfkjlr5lm5diextgtvvjaglh3fe+mitqnvyakt5+hkkplo4+symms6mvgpxzq4rbrdlsu3pisozfyye/qnlj0vmtjgzd5k5mjndrspar/1pyjr7pic+fdioldlpp9egpleb7vyyas8mj8ckly4gxpjhw334tqfx+ayebkundlwpof97ahuwqzhjqjf4qca1unopey4ldx+posdhdcggnueyxhwtzvxglqfh2ltetsiht1n7c2mb6zyucenhhkshmtmdftasrw9ij0bjwazexs0rqst2czdp7au8x5i8jyziyqnkfterolil43rpw/zqou+stndrqgss77hpbousjs9findv6hhyzulrjdhkciznthxvxk506qkvffet6t24qn+ulsermisb5f344skr+sl2dslaelthmgbulsag9fqpc5q4/pizlbrje0dff+hoxptf9ae6xsqx3/25kj/yepc/5qndn6iyvruhy+ransywrhgspfwi13qmf0dcjsskdknunvaooge3j75rekz2pqjf3guokkl/igurnsh7jpnobptwl+i9b1to18dpzszuxv/3i73naihlra19svs3igshhbvmob5l5thhibg0utrkialygpfrurqn4ngnt5tqjem2uvcbw+lboiqfyxmicegemtgxg1l5szcrevjx/3iikr5esfjdmmiijz5s0llpvo8ikg3sqiicixj+z6hcwituk49/cczzytwmddgvybj5p7r/d1p0fifonv/zsj3k/sdtihuknc0vfiwvk6glqbemkn/lq82iayitcrcsn+kmi1jzip7fdwn+kokvxmiu9z0dbz9nir6eatu1pgoi6v0mqqgtdfovk3demkdmkhk6d1uh4tu7zl1g5uj93t0gjnin30dy4hnal8otijeq0ocfmrid/ggsjhjofduwkgegj/d+cdyaybanq6hdlo7mg2f6jh4ye0p3edingvvbqdnipsaeiu6r9sikvaprkgmckue8jieriyxarbwi9i4s4lbgeauugdvvcc3xg6an8oubvatciqawx4ailzcow0tevxvwtywgu33hexecovbvzqpr4bh3xynt/hkucn0yqqhoakptipblx6me97rhryq3bb437aejeamhb7xgxkz8ad54dgq3jivdphwk4tt7njvqwaiugdqvjbirsrrrwbsx68wbbk0ls6zwhhzg0ixsad20ky68z7o5fthbx1dlpbrdgmbc+1t1uy79s1bleewcyjypgqqpe+bap0hd1xwlfeiuhvru7yyscyagpnvvzoxymjjvdtt8kdjpqxxdvyofj38xqp78jjkpcp9jew23ybre4/kp6zmmleqoocs1lqfxxaj7mgsiqjnbkeeteslgi/xck91enewfg2krrjezpdr+lyduabtcxpqmp+duxywsyoksw3dzbx5u0x4uplp8t0kbv6pb+sxmphhzyypkkz9/itwqlugtyrc7tt8/wj4revhrikdtnbzgbyynyp8kinn7fm8djhxitav79atuhr1j2fp+2adw6yk2qrno6h2levvdvcps49mavrzh7ridimvieodl8lvz2rbjpvxjcaghbpn3ifxczrnsdvd/lz6amiggedklsxjwzlk9yg2cmi//xjbhl0iw5a1xla2yqzanq==".to_string().as_bytes().to_vec();
         let s = SignerMock {};
-        let trx = Transaction::issue(s, "test".to_string(), &data, "".to_string());
+        let trx = Transaction::issue(
+            &s,
+            &s,
+            "next transaction".to_string(),
+            data,
+            Address::from_address_reader(&s, &s),
+        );
         let rounds: usize = 5;
         for _ in 0..rounds {
             let v = &trx.as_vector_bytes()[..];
@@ -130,8 +271,10 @@ mod tests {
 
     #[test]
     fn issue() {
-        let issuer = SignerWallet::new();
-        let receiver = SignerWallet::new();
+        let q_issuer: SignerWallet = SignerWallet::new();
+        let issuer: PreQuantSignerWallet = PreQuantSignerWallet::new();
+        let q_receiver: SignerWallet = SignerWallet::new();
+        let receiver: PreQuantSignerWallet = PreQuantSignerWallet::new();
         let rounds: usize = 2;
         let cap = 100000;
         let mut data: Vec<u8> = Vec::with_capacity(cap);
@@ -140,10 +283,11 @@ mod tests {
         }
         for _ in 0..rounds {
             let trx = Transaction::issue(
-                issuer,
+                &issuer,
+                &q_issuer,
                 "next transaction".to_string(),
-                &data,
-                receiver.address(),
+                data.clone(),
+                Address::from_address_reader(&receiver, &q_receiver),
             );
             assert_eq!(trx.as_vector_bytes().len(), trx.estimated_size());
         }
@@ -151,8 +295,10 @@ mod tests {
 
     #[test]
     fn approve() {
-        let issuer = SignerWallet::new();
-        let receiver = SignerWallet::new();
+        let q_issuer: SignerWallet = SignerWallet::new();
+        let issuer: PreQuantSignerWallet = PreQuantSignerWallet::new();
+        let q_receiver: SignerWallet = SignerWallet::new();
+        let receiver: PreQuantSignerWallet = PreQuantSignerWallet::new();
         let rounds: usize = 2;
         let cap = 100000;
         let mut data: Vec<u8> = Vec::with_capacity(cap);
@@ -160,21 +306,24 @@ mod tests {
             data.push(128);
         }
         let mut trx = Transaction::issue(
-            issuer,
+            &issuer,
+            &q_issuer,
             "next transaction".to_string(),
-            &data,
-            receiver.address(),
+            data,
+            Address::from_address_reader(&receiver, &q_receiver),
         );
         for _ in 0..rounds {
-            trx.approve(&receiver);
+            trx.approve(&receiver, &q_receiver);
             assert_eq!(trx.as_vector_bytes().len(), trx.estimated_size());
         }
     }
 
     #[test]
     fn validate_for_issuer() {
-        let issuer = SignerWallet::new();
-        let receiver = SignerWallet::new();
+        let q_issuer: SignerWallet = SignerWallet::new();
+        let issuer: PreQuantSignerWallet = PreQuantSignerWallet::new();
+        let q_receiver: SignerWallet = SignerWallet::new();
+        let receiver: PreQuantSignerWallet = PreQuantSignerWallet::new();
         let rounds: usize = 2;
         let cap = 100000;
         let mut data: Vec<u8> = Vec::with_capacity(cap);
@@ -182,21 +331,24 @@ mod tests {
             data.push(128);
         }
         let trx = Transaction::issue(
-            issuer,
+            &issuer,
+            &q_issuer,
             "next transaction".to_string(),
-            &data,
-            receiver.address(),
+            data,
+            Address::from_address_reader(&receiver, &q_receiver),
         );
         for _ in 0..rounds {
-            let result = trx.validate_for_issuer(&receiver);
+            let result = trx.validate_for_issuer(&receiver, &q_receiver);
             assert_eq!(result, true);
         }
     }
 
     #[test]
     fn validate_for_receiver() {
-        let issuer = SignerWallet::new();
-        let receiver = SignerWallet::new();
+        let q_issuer: SignerWallet = SignerWallet::new();
+        let issuer: PreQuantSignerWallet = PreQuantSignerWallet::new();
+        let q_receiver: SignerWallet = SignerWallet::new();
+        let receiver: PreQuantSignerWallet = PreQuantSignerWallet::new();
         let rounds: usize = 2;
         let cap = 100000;
         let mut data: Vec<u8> = Vec::with_capacity(cap);
@@ -204,27 +356,30 @@ mod tests {
             data.push(128);
         }
         let mut trx = Transaction::issue(
-            issuer,
+            &issuer,
+            &q_issuer,
             "next transaction".to_string(),
-            &data,
-            receiver.address(),
+            data,
+            Address::from_address_reader(&receiver, &q_receiver),
         );
-        trx.approve(&receiver);
+        trx.approve(&receiver, &q_receiver);
 
         for _ in 0..rounds {
-            let result = trx.validate_for_receiver(&issuer);
+            let result = trx.validate_for_receiver(&issuer, &q_issuer);
             assert_eq!(result, true);
         }
         for _ in 0..rounds {
-            let result = trx.validate_for_receiver(&receiver);
+            let result = trx.validate_for_receiver(&receiver, &q_receiver);
             assert_eq!(result, true);
         }
     }
 
     #[test]
     fn validate_for_wrong_issuer() {
-        let issuer = SignerWallet::new();
-        let receiver = SignerWallet::new();
+        let q_issuer: SignerWallet = SignerWallet::new();
+        let issuer: PreQuantSignerWallet = PreQuantSignerWallet::new();
+        let q_receiver: SignerWallet = SignerWallet::new();
+        let receiver: PreQuantSignerWallet = PreQuantSignerWallet::new();
         let rounds: usize = 2;
         let cap = 100000;
         let mut data: Vec<u8> = Vec::with_capacity(cap);
@@ -232,28 +387,31 @@ mod tests {
             data.push(128);
         }
         let mut trx = Transaction::issue(
-            issuer,
+            &issuer,
+            &q_issuer,
             "next transaction".to_string(),
-            &data,
-            receiver.address(),
+            data,
+            Address::from_address_reader(&receiver, &q_receiver),
         );
 
-        trx.issuer = receiver.address(); // Inject wrong issuer address.
+        trx.issuer = Address::from_address_reader(&receiver, &q_receiver); // Inject wrong issuer address.
 
         for _ in 0..rounds {
-            let result = trx.validate_for_issuer(&issuer);
+            let result = trx.validate_for_receiver(&issuer, &q_issuer);
             assert_eq!(result, false);
         }
         for _ in 0..rounds {
-            let result = trx.validate_for_issuer(&receiver);
+            let result = trx.validate_for_receiver(&receiver, &q_receiver);
             assert_eq!(result, false);
         }
     }
 
     #[test]
     fn validate_for_wrong_receiver() {
-        let issuer = SignerWallet::new();
-        let receiver = SignerWallet::new();
+        let q_issuer: SignerWallet = SignerWallet::new();
+        let issuer: PreQuantSignerWallet = PreQuantSignerWallet::new();
+        let q_receiver: SignerWallet = SignerWallet::new();
+        let receiver: PreQuantSignerWallet = PreQuantSignerWallet::new();
         let rounds: usize = 2;
         let cap = 100000;
         let mut data: Vec<u8> = Vec::with_capacity(cap);
@@ -261,27 +419,30 @@ mod tests {
             data.push(128);
         }
         let mut trx = Transaction::issue(
-            issuer,
+            &issuer,
+            &q_issuer,
             "next transaction".to_string(),
-            &data,
-            receiver.address(),
+            data,
+            Address::from_address_reader(&receiver, &q_receiver),
         );
-        trx.approve(&issuer); // Approve by the wrong wallet.
+        trx.approve(&issuer, &q_issuer); // Approve by the wrong wallet.
 
         for _ in 0..rounds {
-            let result = trx.validate_for_receiver(&issuer);
+            let result = trx.validate_for_receiver(&issuer, &q_issuer);
             assert_eq!(result, false);
         }
         for _ in 0..rounds {
-            let result = trx.validate_for_receiver(&receiver);
+            let result = trx.validate_for_receiver(&receiver, &q_receiver);
             assert_eq!(result, false);
         }
     }
 
     #[test]
     fn validate_for_altered_data() {
-        let issuer = SignerWallet::new();
-        let receiver = SignerWallet::new();
+        let q_issuer: SignerWallet = SignerWallet::new();
+        let issuer: PreQuantSignerWallet = PreQuantSignerWallet::new();
+        let q_receiver: SignerWallet = SignerWallet::new();
+        let receiver: PreQuantSignerWallet = PreQuantSignerWallet::new();
         let rounds: usize = 2;
         let cap = 100000;
         let mut data: Vec<u8> = Vec::with_capacity(cap);
@@ -289,10 +450,11 @@ mod tests {
             data.push(128);
         }
         let mut trx = Transaction::issue(
-            issuer,
+            &issuer,
+            &q_issuer,
             "next transaction".to_string(),
-            &data,
-            receiver.address(),
+            data,
+            Address::from_address_reader(&receiver, &q_receiver),
         );
 
         let mut data_wrong: Vec<u8> = Vec::with_capacity(cap);
@@ -307,19 +469,21 @@ mod tests {
         trx.data = data_wrong.clone(); // Alter data.
 
         for _ in 0..rounds {
-            let result = trx.validate_for_issuer(&issuer);
+            let result = trx.validate_for_receiver(&issuer, &q_issuer);
             assert_eq!(result, false);
         }
         for _ in 0..rounds {
-            let result = trx.validate_for_issuer(&receiver);
+            let result = trx.validate_for_receiver(&receiver, &q_receiver);
             assert_eq!(result, false);
         }
     }
 
     #[test]
     fn validate_for_altered_zero_data() {
-        let issuer = SignerWallet::new();
-        let receiver = SignerWallet::new();
+        let q_issuer: SignerWallet = SignerWallet::new();
+        let issuer: PreQuantSignerWallet = PreQuantSignerWallet::new();
+        let q_receiver: SignerWallet = SignerWallet::new();
+        let receiver: PreQuantSignerWallet = PreQuantSignerWallet::new();
         let rounds: usize = 2;
         let cap = 100000;
         let mut data: Vec<u8> = Vec::with_capacity(cap);
@@ -327,28 +491,31 @@ mod tests {
             data.push(128);
         }
         let mut trx = Transaction::issue(
-            issuer,
+            &issuer,
+            &q_issuer,
             "next transaction".to_string(),
-            &data,
-            receiver.address(),
+            data,
+            Address::from_address_reader(&receiver, &q_receiver),
         );
 
         trx.data = Vec::new().clone(); // Alter data.
 
         for _ in 0..rounds {
-            let result = trx.validate_for_issuer(&issuer);
+            let result = trx.validate_for_receiver(&issuer, &q_issuer);
             assert_eq!(result, false);
         }
         for _ in 0..rounds {
-            let result = trx.validate_for_issuer(&receiver);
+            let result = trx.validate_for_receiver(&receiver, &q_receiver);
             assert_eq!(result, false);
         }
     }
 
     #[test]
     fn validate_for_altered_subject() {
-        let issuer = SignerWallet::new();
-        let receiver = SignerWallet::new();
+        let q_issuer: SignerWallet = SignerWallet::new();
+        let issuer: PreQuantSignerWallet = PreQuantSignerWallet::new();
+        let q_receiver: SignerWallet = SignerWallet::new();
+        let receiver: PreQuantSignerWallet = PreQuantSignerWallet::new();
         let rounds: usize = 2;
         let cap = 100000;
         let mut data: Vec<u8> = Vec::with_capacity(cap);
@@ -356,28 +523,31 @@ mod tests {
             data.push(128);
         }
         let mut trx = Transaction::issue(
-            issuer,
+            &issuer,
+            &q_issuer,
             "next transaction".to_string(),
-            &data,
-            receiver.address(),
+            data,
+            Address::from_address_reader(&receiver, &q_receiver),
         );
 
         trx.subject = "altered".to_string();
 
         for _ in 0..rounds {
-            let result = trx.validate_for_issuer(&issuer);
+            let result = trx.validate_for_receiver(&issuer, &q_issuer);
             assert_eq!(result, false);
         }
         for _ in 0..rounds {
-            let result = trx.validate_for_issuer(&receiver);
+            let result = trx.validate_for_receiver(&receiver, &q_receiver);
             assert_eq!(result, false);
         }
     }
 
     #[test]
     fn validate_for_altered_time() {
-        let issuer = SignerWallet::new();
-        let receiver = SignerWallet::new();
+        let q_issuer: SignerWallet = SignerWallet::new();
+        let issuer: PreQuantSignerWallet = PreQuantSignerWallet::new();
+        let q_receiver: SignerWallet = SignerWallet::new();
+        let receiver: PreQuantSignerWallet = PreQuantSignerWallet::new();
         let rounds: usize = 2;
         let cap = 100000;
         let mut data: Vec<u8> = Vec::with_capacity(cap);
@@ -385,10 +555,11 @@ mod tests {
             data.push(128);
         }
         let mut trx = Transaction::issue(
-            issuer,
+            &issuer,
+            &q_issuer,
             "next transaction".to_string(),
-            &data,
-            receiver.address(),
+            data,
+            Address::from_address_reader(&receiver, &q_receiver),
         );
 
         let hundred_millis = time::Duration::from_millis(100);
@@ -396,11 +567,11 @@ mod tests {
         trx.created_at = Instant::now().elapsed().as_nanos();
 
         for _ in 0..rounds {
-            let result = trx.validate_for_issuer(&issuer);
+            let result = trx.validate_for_receiver(&issuer, &q_issuer);
             assert_eq!(result, false);
         }
         for _ in 0..rounds {
-            let result = trx.validate_for_issuer(&receiver);
+            let result = trx.validate_for_receiver(&receiver, &q_receiver);
             assert_eq!(result, false);
         }
     }

@@ -1,10 +1,11 @@
-use crate::globals::{AddressReader, ErrorSignerVerifier, Signer, Verifier};
+use crate::globals::SignerVerifierAddressReader;
+use crate::globals::{AddressReader, ErrorSecure, Signer, Verifier};
 use ed25519_dalek::ed25519::SignatureBytes;
 use ed25519_dalek::Digest;
 use ed25519_dalek::Signature;
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use rand_core::OsRng;
-use sha2::Sha512;
+use sha3::Sha3_512;
 
 const VERSION: &'static [u8; 2] = b"01";
 
@@ -48,7 +49,7 @@ impl AddressReader for SignerWallet {
 
 impl Signer for SignerWallet {
     fn sign(&self, msg: &[u8]) -> Vec<u8> {
-        let mut prehashed: Sha512 = Sha512::new();
+        let mut prehashed: Sha3_512 = Sha3_512::new();
         prehashed.update(msg);
         if let Ok(sig) = self.signing_key.sign_prehashed(prehashed, Some(CONTEXT)) {
             return sig.to_bytes().to_vec();
@@ -59,8 +60,8 @@ impl Signer for SignerWallet {
 }
 
 impl Verifier for SignerWallet {
-    fn validate_self(&self, msg: &[u8], sig: &[u8]) -> Result<(), ErrorSignerVerifier> {
-        let mut prehashed: Sha512 = Sha512::new();
+    fn validate_self(&self, msg: &[u8], sig: &[u8]) -> Result<(), ErrorSecure> {
+        let mut prehashed: Sha3_512 = Sha3_512::new();
         prehashed.update(msg);
         if let Ok(signature_bytes) = SignatureBytes::try_from(sig) {
             let sig = Signature::from_bytes(&signature_bytes as &SignatureBytes);
@@ -73,21 +74,16 @@ impl Verifier for SignerWallet {
             }
         }
 
-        Err(ErrorSignerVerifier::InvalidSignature)
+        Err(ErrorSecure::InvalidSignature)
     }
 
-    fn validate_other(
-        &self,
-        msg: &[u8],
-        sig: &[u8],
-        address: &str,
-    ) -> Result<(), ErrorSignerVerifier> {
+    fn validate_other(&self, msg: &[u8], sig: &[u8], address: &str) -> Result<(), ErrorSecure> {
         if let Ok(decoded) = bs58::decode(address).into_vec() {
             if !decoded[0..2].eq(VERSION) {
-                return Err(ErrorSignerVerifier::InvalidPublicKey);
+                return Err(ErrorSecure::InvalidPublicKey);
             }
             if decoded[2..].len() != 32 {
-                return Err(ErrorSignerVerifier::InvalidPublicKey);
+                return Err(ErrorSecure::InvalidPublicKey);
             }
             let mut verifying_key_bytes: [u8; 32] = [0; 32];
             for (i, v) in decoded[2..].iter().enumerate() {
@@ -95,7 +91,7 @@ impl Verifier for SignerWallet {
             }
 
             if let Ok(verifying_key) = VerifyingKey::from_bytes(&verifying_key_bytes) {
-                let mut prehashed: Sha512 = Sha512::new();
+                let mut prehashed: Sha3_512 = Sha3_512::new();
                 prehashed.update(msg);
                 if let Ok(signature_bytes) = SignatureBytes::try_from(sig) {
                     let sig = Signature::from_bytes(&signature_bytes as &SignatureBytes);
@@ -105,9 +101,11 @@ impl Verifier for SignerWallet {
                 }
             }
         }
-        Err(ErrorSignerVerifier::InvalidSignature)
+        Err(ErrorSecure::InvalidSignature)
     }
 }
+
+impl SignerVerifierAddressReader for SignerWallet {}
 
 #[cfg(test)]
 mod tests {

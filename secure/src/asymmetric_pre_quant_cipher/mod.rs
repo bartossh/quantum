@@ -1,11 +1,13 @@
-use crate::globals::{AddressReader, EncryptorDecryptor, ErrorEncryptDecrypter};
+use crate::globals::{
+    AddressReader, EncryptorDecryptor, EncryptorDecryptorAddressReader, ErrorSecure,
+};
 use rand::thread_rng;
 use rsa::{
     pkcs1::{DecodeRsaPublicKey, EncodeRsaPublicKey},
     pkcs8::LineEnding,
     Oaep, RsaPrivateKey, RsaPublicKey,
 };
-use sha2::Sha256;
+use sha3::Sha3_512;
 
 const BITS: usize = 2048;
 const VERSION: &'static [u8; 2] = b"01";
@@ -18,7 +20,7 @@ pub struct CipherWallet {
 
 impl CipherWallet {
     #[inline]
-    pub fn new() -> Result<CipherWallet, ErrorEncryptDecrypter> {
+    pub fn new() -> Result<CipherWallet, ErrorSecure> {
         let mut rng = rand::thread_rng();
 
         if let Ok(private_key) = RsaPrivateKey::new(&mut rng, BITS) {
@@ -28,7 +30,7 @@ impl CipherWallet {
                 sk: private_key,
             });
         }
-        Err(ErrorEncryptDecrypter::InvalidPublicKey)
+        Err(ErrorSecure::InvalidPublicKey)
     }
 }
 
@@ -48,35 +50,37 @@ impl AddressReader for CipherWallet {
 }
 
 impl EncryptorDecryptor for CipherWallet {
-    fn decrypt(&self, msg: &[u8]) -> Result<Vec<u8>, ErrorEncryptDecrypter> {
-        let padding = Oaep::new::<Sha256>();
+    fn decrypt(&self, msg: &[u8]) -> Result<Vec<u8>, ErrorSecure> {
+        let padding = Oaep::new::<Sha3_512>();
         if let Ok(decrypted) = self.sk.decrypt(padding, msg) {
             return Ok(decrypted);
         }
 
-        Err(ErrorEncryptDecrypter::InvalidCipher)
+        Err(ErrorSecure::InvalidCipher)
     }
 
-    fn encrypt(&self, address: String, msg: &[u8]) -> Result<Vec<u8>, ErrorEncryptDecrypter> {
+    fn encrypt(&self, address: String, msg: &[u8]) -> Result<Vec<u8>, ErrorSecure> {
         if let Ok(decoded) = bs58::decode(address).into_vec() {
             if !decoded[0..2].eq(VERSION) {
-                return Err(ErrorEncryptDecrypter::InvalidPublicKey);
+                return Err(ErrorSecure::InvalidPublicKey);
             }
             if let Ok(pem) = String::from_utf8(decoded[2..].to_vec()) {
                 if let Ok(encrypting_key) = RsaPublicKey::from_pkcs1_pem(&pem) {
                     let mut rng = thread_rng();
-                    let padding = Oaep::new::<Sha256>();
+                    let padding = Oaep::new::<Sha3_512>();
                     if let Ok(encrypted) = encrypting_key.encrypt(&mut rng, padding, msg) {
                         return Ok(encrypted);
                     }
-                    return Err(ErrorEncryptDecrypter::UnexpectedFailure);
+                    return Err(ErrorSecure::UnexpectedFailure);
                 }
             }
-            return Err(ErrorEncryptDecrypter::InvalidPublicKey);
+            return Err(ErrorSecure::InvalidPublicKey);
         }
-        Err(ErrorEncryptDecrypter::InvalidPublicKey)
+        Err(ErrorSecure::InvalidPublicKey)
     }
 }
+
+impl EncryptorDecryptorAddressReader for CipherWallet {}
 
 #[cfg(test)]
 mod tests {

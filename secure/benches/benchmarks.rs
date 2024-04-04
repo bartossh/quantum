@@ -1,15 +1,19 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use crypto::asymmetric_pre_quant_cipher::CipherWallet;
-use crypto::asymmetric_quant_cipher::*;
-use crypto::asymmetric_quant_signer::*;
-use crypto::globals::EncryptorDecryptor;
-use crypto::globals::{AddressReader as _, EncapsulatorDecapsulator};
-use crypto::transaction::*;
+use secure::asymmetric_pre_quant_cipher::CipherWallet;
+use secure::asymmetric_pre_quant_signer::SignerWallet as PreQuantSignerWallet;
+use secure::asymmetric_quant_cipher::*;
+use secure::asymmetric_quant_signer::*;
+use secure::globals::EncryptorDecryptor;
+use secure::globals::{AddressReader as _, EncapsulatorDecapsulator};
+use secure::randomizer;
+use secure::transaction::*;
 
 fn benchmark_transaction_issue(c: &mut Criterion) {
     c.bench_function("benchmark_transaction_issue", |b| {
-        let issuer = SignerWallet::new();
-        let receiver = SignerWallet::new();
+        let q_issuer: SignerWallet = SignerWallet::new();
+        let issuer: PreQuantSignerWallet = PreQuantSignerWallet::new();
+        let q_receiver: SignerWallet = SignerWallet::new();
+        let receiver: PreQuantSignerWallet = PreQuantSignerWallet::new();
         let cap = 100000;
         let mut data: Vec<u8> = Vec::with_capacity(cap);
         for _ in 0..cap {
@@ -17,58 +21,84 @@ fn benchmark_transaction_issue(c: &mut Criterion) {
         }
 
         b.iter(|| {
-            let _ =
-                Transaction::issue(issuer, "transaction".to_string(), &data, receiver.address());
+            let _ = Transaction::issue(
+                &issuer,
+                &q_issuer,
+                "next transaction".to_string(),
+                data.clone(),
+                Address::from_address_reader(&receiver, &q_receiver),
+            );
         })
     });
 }
 
 fn benchmark_transaction_approve(c: &mut Criterion) {
     c.bench_function("benchmark_transaction_approve", |b| {
-        let issuer = SignerWallet::new();
-        let receiver = SignerWallet::new();
+        let q_issuer: SignerWallet = SignerWallet::new();
+        let issuer: PreQuantSignerWallet = PreQuantSignerWallet::new();
+        let q_receiver: SignerWallet = SignerWallet::new();
+        let receiver: PreQuantSignerWallet = PreQuantSignerWallet::new();
         let cap = 100000;
         let mut data: Vec<u8> = Vec::with_capacity(cap);
         for _ in 0..cap {
             data.push(128);
         }
-        let mut trx =
-            Transaction::issue(issuer, "transaction".to_string(), &data, receiver.address());
+        let mut trx = Transaction::issue(
+            &issuer,
+            &q_issuer,
+            "next transaction".to_string(),
+            data,
+            Address::from_address_reader(&receiver, &q_receiver),
+        );
 
-        b.iter(|| trx.approve(&receiver).to_owned())
+        b.iter(|| trx.approve(&receiver, &q_receiver).to_owned())
     });
 }
 
 fn benchmark_transaction_validate_issuer(c: &mut Criterion) {
     c.bench_function("benchmark_transaction_validate_issuer", |b| {
-        let issuer = SignerWallet::new();
-        let receiver = SignerWallet::new();
+        let q_issuer: SignerWallet = SignerWallet::new();
+        let issuer: PreQuantSignerWallet = PreQuantSignerWallet::new();
+        let q_receiver: SignerWallet = SignerWallet::new();
+        let receiver: PreQuantSignerWallet = PreQuantSignerWallet::new();
         let cap = 100000;
         let mut data: Vec<u8> = Vec::with_capacity(cap);
         for _ in 0..cap {
             data.push(128);
         }
-        let trx = Transaction::issue(issuer, "transaction".to_string(), &data, receiver.address());
-
-        b.iter(|| trx.validate_for_issuer(&issuer).to_owned())
+        let mut trx = Transaction::issue(
+            &issuer,
+            &q_issuer,
+            "next transaction".to_string(),
+            data,
+            Address::from_address_reader(&receiver, &q_receiver),
+        );
+        trx.approve(&receiver, &q_receiver);
+        b.iter(|| trx.validate_for_issuer(&issuer, &q_issuer).to_owned())
     });
 }
 
 fn benchmark_transaction_validate_receiver(c: &mut Criterion) {
     c.bench_function("benchmark_transaction_validate_receiver", |b| {
-        let issuer = SignerWallet::new();
-        let receiver = SignerWallet::new();
+        let q_issuer: SignerWallet = SignerWallet::new();
+        let issuer: PreQuantSignerWallet = PreQuantSignerWallet::new();
+        let q_receiver: SignerWallet = SignerWallet::new();
+        let receiver: PreQuantSignerWallet = PreQuantSignerWallet::new();
         let cap = 100000;
         let mut data: Vec<u8> = Vec::with_capacity(cap);
         for _ in 0..cap {
             data.push(128);
         }
-        let mut trx =
-            Transaction::issue(issuer, "transaction".to_string(), &data, receiver.address());
+        let mut trx = Transaction::issue(
+            &issuer,
+            &q_issuer,
+            "next transaction".to_string(),
+            data,
+            Address::from_address_reader(&receiver, &q_receiver),
+        );
+        trx.approve(&receiver, &q_receiver);
 
-        trx.approve(&receiver);
-
-        b.iter(|| trx.validate_for_receiver(&issuer).to_owned())
+        b.iter(|| trx.validate_for_receiver(&receiver, &q_receiver).to_owned())
     });
 }
 
@@ -116,6 +146,12 @@ fn benchmark_asymmetric_key_decryption(c: &mut Criterion) {
     });
 }
 
+fn benchmark_random_hash(c: &mut Criterion) {
+    c.bench_function("benchmark_random_hash", |b| {
+        b.iter(|| randomizer::random_hash());
+    });
+}
+
 criterion_group!(
     benches,
     benchmark_transaction_issue,
@@ -125,6 +161,7 @@ criterion_group!(
     benchmark_asymmetric_key_encapsulation,
     benchmark_asymmetric_key_decapsulation,
     benchmark_asymmetric_key_encryption,
-    benchmark_asymmetric_key_decryption
+    benchmark_asymmetric_key_decryption,
+    benchmark_random_hash
 );
 criterion_main!(benches);
