@@ -1,24 +1,11 @@
 mod secret;
-use crate::globals::AsVectorBytes;
+use crate::globals::{AsVectorBytes, ErrorSecure};
 use crate::randomizer::random_hash;
 use enum_iterator::all;
 use serde::{Deserialize, Serialize};
-use std::{result::Result, sync::WaitTimeoutResult};
+use std::result::Result;
 
 const VERSION: &str = "1.0.0";
-
-/// ErrorAssignation contains Assignation errors.
-///
-pub enum ErrorState {
-    UnexpectedFailure,
-    EntityAlreadyExists,
-    SelectedHasherDoesNotExist,
-    SelectedSignerDoesNotExist,
-    SelectedEncapsulatorDoesNotExist,
-    StateNotReset,
-    StateNotHello,
-    WrongIdPresented,
-}
 
 fn get_precedence(
     hs: &[secret::HashSuite],
@@ -338,6 +325,7 @@ pub struct State {
     position: Position,
     cipher_creator: Option<secret::CipherCreator>,
     handshake_data: Vec<u8>,
+    shared_key: Option<Vec<u8>>,
 }
 
 impl State {
@@ -349,6 +337,7 @@ impl State {
             position: Position::Reset,
             cipher_creator: None,
             handshake_data: Vec::new(),
+            shared_key: None,
         }
     }
 
@@ -365,14 +354,14 @@ impl State {
 
     /// Create hello with proposed protocols for the handshake.
     ///
-    pub fn hello_propose(&mut self) -> Result<Hello, ()> {
+    pub fn hello_propose(&mut self) -> Result<Hello, ErrorSecure> {
         if self.position != Position::Reset {
-            return Err(());
+            return Err(ErrorSecure::StateNotReset);
         }
 
         let id_slice = random_hash();
         if id_slice.len() != 32 {
-            return Err(());
+            return Err(ErrorSecure::UnexpectedFailure);
         }
 
         let mut id_arr: [u8; 32] = [0u8; 32];
@@ -391,43 +380,43 @@ impl State {
         Ok(hello)
     }
 
-    pub fn hello_select(&mut self, hello: &Hello) -> Result<Hello, ()> {
+    pub fn hello_select(&mut self, hello: &Hello) -> Result<Hello, ErrorSecure> {
         if self.position != Position::Reset {
-            return Err(());
+            return Err(ErrorSecure::StateNotReset);
         }
 
         let mut hs: secret::HashSuite = secret::HashSuite::Sha3_512;
         if let HashSuiteOps::Selected(hasher) = hello.hash_suits {
             hs = hasher;
         } else {
-            return Err(());
+            return Err(ErrorSecure::WrongHelloStage);
         }
 
         let mut ss: secret::SignerSuite = secret::SignerSuite::ED25519;
         if let SignerSuiteOps::Selected(signer) = hello.sign_suits {
             ss = signer;
         } else {
-            return Err(());
+            return Err(ErrorSecure::WrongHelloStage);
         }
 
         let mut qss: secret::QSignerSuite = secret::QSignerSuite::SPHINCSSHAKE256FSIMPLE;
         if let QSignerSuiteOps::Selected(signer) = hello.q_sign_suits {
             qss = signer;
         } else {
-            return Err(());
+            return Err(ErrorSecure::WrongHelloStage);
         }
 
         let mut cs: secret::CipherSuite = secret::CipherSuite::RSA2048;
         if let CipherSuiteOps::Selected(cipher) = hello.cipher_suits {
             cs = cipher;
         } else {
-            return Err(());
+            return Err(ErrorSecure::WrongHelloStage);
         }
         let mut qcs: secret::QCipherSuite = secret::QCipherSuite::KYBER1024;
         if let QCipherSuiteOps::Selected(cipher) = hello.q_cipher_suits {
             qcs = cipher;
         } else {
-            return Err(());
+            return Err(ErrorSecure::WrongHelloStage);
         }
 
         self.cipher_creator = Some(secret::CipherCreator::with_params(hs, cs, ss, qcs, qss)?);
@@ -441,6 +430,27 @@ impl State {
         self.id = Some(hello.id);
 
         Ok(hello_response)
+    }
+
+    pub fn cipher_generate(&mut self, hello: &Hello) -> Result<secret::Cipher, ErrorSecure> {
+        if self.position != Position::Hello {
+            return Err(ErrorSecure::StateNotHello);
+        }
+        self.handshake_data.extend(hello.as_vector_bytes());
+        if let Some(ck) = &mut self.cipher_creator {
+            let c_a = hello
+                .cipher_address
+                .clone()
+                .ok_or(ErrorSecure::UnexpectedFailure)?;
+            let qc_a = hello
+                .q_cipher_address
+                .clone()
+                .ok_or(ErrorSecure::UnexpectedFailure)?;
+            let (shared_key, cipher) = ck.pack_to_cipher(&self.handshake_data, c_a, qc_a)?;
+            self.shared_key = Some(shared_key);
+            return Ok(cipher);
+        }
+        return Err(ErrorSecure::NoCipherCreator);
     }
 }
 

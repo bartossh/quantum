@@ -1,6 +1,4 @@
-use crate::globals::{
-    AddressReader, ErrorSignerVerifier, Signer, SignerVerifierAddressReader, Verifier,
-};
+use crate::globals::{AddressReader, ErrorSecure, Signer, SignerVerifierAddressReader, Verifier};
 use pqcrypto::sign::sphincsshake256fsimple::{
     detached_sign, keypair, verify_detached_signature, DetachedSignature, PublicKey, SecretKey,
 };
@@ -32,37 +30,32 @@ impl AddressReader for SignerWallet {
 }
 
 impl Verifier for SignerWallet {
-    fn validate_self(&self, msg: &[u8], sig: &[u8]) -> Result<(), ErrorSignerVerifier> {
+    fn validate_self(&self, msg: &[u8], sig: &[u8]) -> Result<(), ErrorSecure> {
         if let Ok(ds) = DetachedSignature::from_bytes(sig) {
             return match verify_detached_signature(&ds, msg, &self.pk) {
                 Ok(()) => Ok(()),
-                Err(_) => Err(ErrorSignerVerifier::InvalidCipher),
+                Err(_) => Err(ErrorSecure::InvalidCipher),
             };
         }
 
-        Err(ErrorSignerVerifier::InvalidSignature)
+        Err(ErrorSecure::InvalidSignature)
     }
 
-    fn validate_other(
-        &self,
-        msg: &[u8],
-        sig: &[u8],
-        address: &str,
-    ) -> Result<(), ErrorSignerVerifier> {
+    fn validate_other(&self, msg: &[u8], sig: &[u8], address: &str) -> Result<(), ErrorSecure> {
         if let Ok(decoded) = bs58::decode(address).into_vec() {
             if !decoded[0..2].eq(VERSION) {
-                return Err(ErrorSignerVerifier::InvalidPublicKey);
+                return Err(ErrorSecure::InvalidPublicKey);
             }
             if let Ok(pk) = PublicKey::from_bytes(&decoded[2..]) {
                 if let Ok(ds) = DetachedSignature::from_bytes(&sig) {
                     return match verify_detached_signature(&ds, &msg, &pk) {
                         Ok(()) => Ok(()),
-                        Err(_) => Err(ErrorSignerVerifier::InvalidCipher),
+                        Err(_) => Err(ErrorSecure::InvalidCipher),
                     };
                 }
             }
         }
-        Err(ErrorSignerVerifier::InvalidPublicKey)
+        Err(ErrorSecure::InvalidPublicKey)
     }
 }
 

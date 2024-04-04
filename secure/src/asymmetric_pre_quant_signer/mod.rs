@@ -1,5 +1,5 @@
 use crate::globals::SignerVerifierAddressReader;
-use crate::globals::{AddressReader, ErrorSignerVerifier, Signer, Verifier};
+use crate::globals::{AddressReader, ErrorSecure, Signer, Verifier};
 use ed25519_dalek::ed25519::SignatureBytes;
 use ed25519_dalek::Digest;
 use ed25519_dalek::Signature;
@@ -60,7 +60,7 @@ impl Signer for SignerWallet {
 }
 
 impl Verifier for SignerWallet {
-    fn validate_self(&self, msg: &[u8], sig: &[u8]) -> Result<(), ErrorSignerVerifier> {
+    fn validate_self(&self, msg: &[u8], sig: &[u8]) -> Result<(), ErrorSecure> {
         let mut prehashed: Sha3_512 = Sha3_512::new();
         prehashed.update(msg);
         if let Ok(signature_bytes) = SignatureBytes::try_from(sig) {
@@ -74,21 +74,16 @@ impl Verifier for SignerWallet {
             }
         }
 
-        Err(ErrorSignerVerifier::InvalidSignature)
+        Err(ErrorSecure::InvalidSignature)
     }
 
-    fn validate_other(
-        &self,
-        msg: &[u8],
-        sig: &[u8],
-        address: &str,
-    ) -> Result<(), ErrorSignerVerifier> {
+    fn validate_other(&self, msg: &[u8], sig: &[u8], address: &str) -> Result<(), ErrorSecure> {
         if let Ok(decoded) = bs58::decode(address).into_vec() {
             if !decoded[0..2].eq(VERSION) {
-                return Err(ErrorSignerVerifier::InvalidPublicKey);
+                return Err(ErrorSecure::InvalidPublicKey);
             }
             if decoded[2..].len() != 32 {
-                return Err(ErrorSignerVerifier::InvalidPublicKey);
+                return Err(ErrorSecure::InvalidPublicKey);
             }
             let mut verifying_key_bytes: [u8; 32] = [0; 32];
             for (i, v) in decoded[2..].iter().enumerate() {
@@ -106,7 +101,7 @@ impl Verifier for SignerWallet {
                 }
             }
         }
-        Err(ErrorSignerVerifier::InvalidSignature)
+        Err(ErrorSecure::InvalidSignature)
     }
 }
 

@@ -14,11 +14,21 @@ pub trait AddressReader {
 /// Errors describing EncapsulatorDecapsulator failures.
 ///
 #[derive(Debug)]
-pub enum ErrorSignerVerifier {
+pub enum ErrorSecure {
     InvalidPublicKey,
     InvalidSignature,
     InvalidCipher,
+    NoCipherCreator,
     UnexpectedFailure,
+    WrongHelloStage,
+    InvalidHash,
+    EntityAlreadyExists,
+    SelectedHasherDoesNotExist,
+    SelectedSignerDoesNotExist,
+    SelectedEncapsulatorDoesNotExist,
+    StateNotReset,
+    StateNotHello,
+    WrongIdPresented,
 }
 
 /// Signer signs the message returning DetachedSignature.
@@ -34,30 +44,16 @@ pub trait Signer {
 pub trait Verifier {
     /// Validate self signed message.
     ///
-    fn validate_self(&self, msg: &[u8], sig: &[u8]) -> Result<(), ErrorSignerVerifier>;
+    fn validate_self(&self, msg: &[u8], sig: &[u8]) -> Result<(), ErrorSecure>;
 
     /// Validate message signed by other Signer.
     ///
-    fn validate_other(
-        &self,
-        msg: &[u8],
-        sig: &[u8],
-        address: &str,
-    ) -> Result<(), ErrorSignerVerifier>;
+    fn validate_other(&self, msg: &[u8], sig: &[u8], address: &str) -> Result<(), ErrorSecure>;
 }
 
 /// SignerVerifierAddressReader combines Signer, Verifier and AddressReader traits.
 ///
 pub trait SignerVerifierAddressReader: Signer + Verifier + AddressReader {}
-
-/// Errors describing EncapsulatorDecapsulator failures.
-///
-#[derive(Debug)]
-pub enum ErrorEncapsulateDecapsulate {
-    InvalidPublicKey,
-    InvalidCipher,
-    UnexpectedFailure,
-}
 
 /// EncapsulatorDecapsulator generates shared key and encapsulates the shared key
 /// and decapsulates shared key using post-quantum asymmetric key cryptography.
@@ -67,40 +63,27 @@ pub trait EncapsulatorDecapsulator {
     /// First entity in the Result success tuple is SecretKey and Second one is Ciphertext.
     /// # Examples
     ///
-    fn encapsulate_shared_key(
-        &self,
-        address: String,
-    ) -> Result<(Vec<u8>, Vec<u8>), ErrorEncapsulateDecapsulate>;
+    fn encapsulate_shared_key(&self, address: String) -> Result<(Vec<u8>, Vec<u8>), ErrorSecure>;
 
     /// Decapsulates shared secret key from bytes array.
     /// Result success contains vector of bytes representing shared key.
     ///
-    fn decapsulate_shared_key(&self, cipher: &[u8])
-        -> Result<Vec<u8>, ErrorEncapsulateDecapsulate>;
+    fn decapsulate_shared_key(&self, cipher: &[u8]) -> Result<Vec<u8>, ErrorSecure>;
 }
 
 /// EncapsulatorDecapsulatorAddressReader combines EncapsulatorDecapsulator and AddressReader traits.
 ///
 pub trait EncapsulatorDecapsulatorAddressReader: EncapsulatorDecapsulator + AddressReader {}
 
-/// Errors describing EncryptDecrypter failures.
-///
-#[derive(Debug)]
-pub enum ErrorEncryptDecrypter {
-    InvalidPublicKey,
-    InvalidCipher,
-    UnexpectedFailure,
-}
-
 /// EncryptorDecryptor encrypts and decrypts message using asymmetric key cryptography.
 pub trait EncryptorDecryptor {
     /// Encrypts the message for given public address.
     ///
-    fn encrypt(&self, address: String, msg: &[u8]) -> Result<Vec<u8>, ErrorEncryptDecrypter>;
+    fn encrypt(&self, address: String, msg: &[u8]) -> Result<Vec<u8>, ErrorSecure>;
 
     /// Decrypts message encoded for Self with Self public address.
     ///
-    fn decrypt(&self, msg: &[u8]) -> Result<Vec<u8>, ErrorEncryptDecrypter>;
+    fn decrypt(&self, msg: &[u8]) -> Result<Vec<u8>, ErrorSecure>;
 }
 
 /// EncryptorDecryptor combines EncryptorDecryptor and AddressReader traits.
