@@ -448,9 +448,22 @@ impl State {
                 .ok_or(ErrorSecure::UnexpectedFailure)?;
             let (shared_key, cipher) = ck.pack_to_cipher(&self.handshake_data, c_a, qc_a)?;
             self.shared_key = Some(shared_key);
+            self.position = Position::SharedKey;
             return Ok(cipher);
         }
         return Err(ErrorSecure::NoCipherCreator);
+    }
+
+    pub fn cipher_decode_sharedkey(&mut self, cipher: &secret::Cipher) -> Result<(), ErrorSecure> {
+        if self.position != Position::Hello {
+            return Err(ErrorSecure::StateNotHello);
+        }
+        if let Some(ck) = &mut self.cipher_creator {
+            self.shared_key = Some(ck.unpack_from_cipher(&cipher, &self.handshake_data)?);
+            return Ok(());
+        }
+
+        Err(ErrorSecure::NoCipherCreator)
     }
 }
 
