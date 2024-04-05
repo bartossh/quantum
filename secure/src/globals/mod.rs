@@ -20,7 +20,7 @@ pub enum ErrorSecure {
     InvalidCipher,
     NoCipherCreator,
     UnexpectedFailure,
-    WrongHelloStage,
+    WrongHelloSuitsStage,
     InvalidHash,
     EntityAlreadyExists,
     SelectedHasherDoesNotExist,

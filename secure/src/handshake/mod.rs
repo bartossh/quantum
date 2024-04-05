@@ -21,7 +21,7 @@ fn get_precedence(
         secret::SignerSuite,
         secret::QSignerSuite,
     ),
-    (),
+    ErrorSecure,
 > {
     let mut shs: Option<secret::HashSuite> = None;
     let mut scs: Option<secret::CipherSuite> = None;
@@ -29,48 +29,53 @@ fn get_precedence(
     let mut sss: Option<secret::SignerSuite> = None;
     let mut sqss: Option<secret::QSignerSuite> = None;
 
-    for candidate in &[secret::HashSuite::Sha3_512] {
+    'hash_loop: for candidate in &[secret::HashSuite::Sha3_512] {
         for item in hs {
             if item == candidate {
                 shs = Some(*candidate);
+                break 'hash_loop;
             }
         }
     }
 
-    for candidate in &[secret::CipherSuite::RSA2048] {
+    'cipher_loop: for candidate in &[secret::CipherSuite::RSA2048] {
         for item in cs {
             if item == candidate {
                 scs = Some(*candidate);
+                break 'cipher_loop;
             }
         }
     }
 
-    for candidate in &[secret::QCipherSuite::KYBER1024] {
+    'qcipher_loop: for candidate in &[secret::QCipherSuite::KYBER1024] {
         for item in qcs {
             if item == candidate {
                 sqcs = Some(*candidate);
+                break 'qcipher_loop;
             }
         }
     }
 
-    for candidate in &[secret::SignerSuite::ED25519] {
+    'signer_loop: for candidate in &[secret::SignerSuite::ED25519] {
         for item in ss {
             if item == candidate {
                 sss = Some(*candidate);
+                break 'signer_loop;
             }
         }
     }
 
-    for candidate in &[secret::QSignerSuite::SPHINCSSHAKE256FSIMPLE] {
+    'qsigner_loop: for candidate in &[secret::QSignerSuite::SPHINCSSHAKE256FSIMPLE] {
         for item in qss {
             if item == candidate {
                 sqss = Some(*candidate);
+                break 'qsigner_loop;
             }
         }
     }
 
     if shs == None || scs == None || sqcs == None || sss == None || sqss == None {
-        return Err(());
+        return Err(ErrorSecure::WrongHelloSuitsStage);
     }
 
     Ok((
@@ -82,40 +87,120 @@ fn get_precedence(
     ))
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 enum HashSuiteOps {
     Selected(secret::HashSuite),
     List(Vec<secret::HashSuite>),
 }
 
-#[derive(Serialize, Deserialize)]
+impl HashSuiteOps {
+    fn into_list(&self) -> Result<&Vec<secret::HashSuite>, ErrorSecure> {
+        match &self {
+            HashSuiteOps::List(list) => Ok(list),
+            _ => Err(ErrorSecure::WrongHelloSuitsStage),
+        }
+    }
+
+    fn into_selected(&self) -> Result<&secret::HashSuite, ErrorSecure> {
+        match &self {
+            HashSuiteOps::Selected(s) => Ok(s),
+            _ => Err(ErrorSecure::WrongHelloSuitsStage),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 enum CipherSuiteOps {
     Selected(secret::CipherSuite),
     List(Vec<secret::CipherSuite>),
 }
 
-#[derive(Serialize, Deserialize)]
+impl CipherSuiteOps {
+    fn into_list(&self) -> Result<&Vec<secret::CipherSuite>, ErrorSecure> {
+        match &self {
+            CipherSuiteOps::List(list) => Ok(list),
+            _ => Err(ErrorSecure::WrongHelloSuitsStage),
+        }
+    }
+
+    fn into_selected(&self) -> Result<&secret::CipherSuite, ErrorSecure> {
+        match &self {
+            CipherSuiteOps::Selected(s) => Ok(s),
+            _ => Err(ErrorSecure::WrongHelloSuitsStage),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 enum QCipherSuiteOps {
     Selected(secret::QCipherSuite),
     List(Vec<secret::QCipherSuite>),
 }
 
-#[derive(Serialize, Deserialize)]
+impl QCipherSuiteOps {
+    fn into_list(&self) -> Result<&Vec<secret::QCipherSuite>, ErrorSecure> {
+        match &self {
+            QCipherSuiteOps::List(list) => Ok(list),
+            _ => Err(ErrorSecure::WrongHelloSuitsStage),
+        }
+    }
+
+    fn into_selected(&self) -> Result<&secret::QCipherSuite, ErrorSecure> {
+        match &self {
+            QCipherSuiteOps::Selected(s) => Ok(s),
+            _ => Err(ErrorSecure::WrongHelloSuitsStage),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 enum SignerSuiteOps {
     Selected(secret::SignerSuite),
     List(Vec<secret::SignerSuite>),
 }
 
-#[derive(Serialize, Deserialize)]
+impl SignerSuiteOps {
+    fn into_list(&self) -> Result<&Vec<secret::SignerSuite>, ErrorSecure> {
+        match &self {
+            SignerSuiteOps::List(list) => Ok(list),
+            _ => Err(ErrorSecure::WrongHelloSuitsStage),
+        }
+    }
+
+    fn into_selected(&self) -> Result<&secret::SignerSuite, ErrorSecure> {
+        match &self {
+            SignerSuiteOps::Selected(s) => Ok(s),
+            _ => Err(ErrorSecure::WrongHelloSuitsStage),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 enum QSignerSuiteOps {
     Selected(secret::QSignerSuite),
     List(Vec<secret::QSignerSuite>),
 }
 
+impl QSignerSuiteOps {
+    fn into_list(&self) -> Result<&Vec<secret::QSignerSuite>, ErrorSecure> {
+        match &self {
+            QSignerSuiteOps::List(list) => Ok(list),
+            _ => Err(ErrorSecure::WrongHelloSuitsStage),
+        }
+    }
+
+    fn into_selected(&self) -> Result<&secret::QSignerSuite, ErrorSecure> {
+        match &self {
+            QSignerSuiteOps::Selected(s) => Ok(s),
+            _ => Err(ErrorSecure::WrongHelloSuitsStage),
+        }
+    }
+}
+
 /// Hello message allows to agree cipher suits that will be used to create E2E ephemeral key
 /// exchange between E2E clients with selected cipher suit.
 ///  
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Hello {
     id: [u8; 32],
     version: String,
@@ -201,7 +286,7 @@ impl Hello {
         };
         match &self.sign_suits {
             SignerSuiteOps::List(set) => {
-                for i in set.iter() {
+                for _ in set.iter() {
                     size += 1;
                 }
             }
@@ -385,39 +470,13 @@ impl State {
             return Err(ErrorSecure::StateNotReset);
         }
 
-        let mut hs: secret::HashSuite = secret::HashSuite::Sha3_512;
-        if let HashSuiteOps::Selected(hasher) = hello.hash_suits {
-            hs = hasher;
-        } else {
-            return Err(ErrorSecure::WrongHelloStage);
-        }
-
-        let mut ss: secret::SignerSuite = secret::SignerSuite::ED25519;
-        if let SignerSuiteOps::Selected(signer) = hello.sign_suits {
-            ss = signer;
-        } else {
-            return Err(ErrorSecure::WrongHelloStage);
-        }
-
-        let mut qss: secret::QSignerSuite = secret::QSignerSuite::SPHINCSSHAKE256FSIMPLE;
-        if let QSignerSuiteOps::Selected(signer) = hello.q_sign_suits {
-            qss = signer;
-        } else {
-            return Err(ErrorSecure::WrongHelloStage);
-        }
-
-        let mut cs: secret::CipherSuite = secret::CipherSuite::RSA2048;
-        if let CipherSuiteOps::Selected(cipher) = hello.cipher_suits {
-            cs = cipher;
-        } else {
-            return Err(ErrorSecure::WrongHelloStage);
-        }
-        let mut qcs: secret::QCipherSuite = secret::QCipherSuite::KYBER1024;
-        if let QCipherSuiteOps::Selected(cipher) = hello.q_cipher_suits {
-            qcs = cipher;
-        } else {
-            return Err(ErrorSecure::WrongHelloStage);
-        }
+        let (hs, cs, qcs, ss, qss) = get_precedence(
+            hello.hash_suits.into_list()?,
+            hello.cipher_suits.into_list()?,
+            hello.q_cipher_suits.into_list()?,
+            hello.sign_suits.into_list()?,
+            hello.q_sign_suits.into_list()?,
+        )?;
 
         self.cipher_creator = Some(secret::CipherCreator::with_params(hs, cs, ss, qcs, qss)?);
         let (s, qs, c, qc) = self.cipher_creator.as_ref().unwrap().addresses();
@@ -436,22 +495,31 @@ impl State {
         if self.position != Position::Hello {
             return Err(ErrorSecure::StateNotHello);
         }
+
+        self.cipher_creator = Some(secret::CipherCreator::with_params(
+            *hello.hash_suits.into_selected()?,
+            *hello.cipher_suits.into_selected()?,
+            *hello.sign_suits.into_selected()?,
+            *hello.q_cipher_suits.into_selected()?,
+            *hello.q_sign_suits.into_selected()?,
+        )?);
         self.handshake_data.extend(hello.as_vector_bytes());
-        if let Some(ck) = &mut self.cipher_creator {
-            let c_a = hello
-                .cipher_address
-                .clone()
-                .ok_or(ErrorSecure::UnexpectedFailure)?;
-            let qc_a = hello
-                .q_cipher_address
-                .clone()
-                .ok_or(ErrorSecure::UnexpectedFailure)?;
-            let (shared_key, cipher) = ck.pack_to_cipher(&self.handshake_data, c_a, qc_a)?;
-            self.shared_key = Some(shared_key);
-            self.position = Position::SharedKey;
-            return Ok(cipher);
-        }
-        return Err(ErrorSecure::NoCipherCreator);
+        let c_a = hello
+            .cipher_address
+            .clone()
+            .ok_or(ErrorSecure::UnexpectedFailure)?;
+        let qc_a = hello
+            .q_cipher_address
+            .clone()
+            .ok_or(ErrorSecure::UnexpectedFailure)?;
+        let (shared_key, cipher) = self.cipher_creator.as_mut().unwrap().pack_to_cipher(
+            &self.handshake_data,
+            c_a,
+            qc_a,
+        )?;
+        self.shared_key = Some(shared_key);
+        self.position = Position::SharedKey;
+        return Ok(cipher);
     }
 
     pub fn cipher_decode_sharedkey(&mut self, cipher: &secret::Cipher) -> Result<(), ErrorSecure> {
@@ -472,5 +540,42 @@ mod tests {
     use super::*;
 
     #[test]
-    fn fool_successful_handshake() {}
+    fn full_successful_handshake() {
+        let handshakes_num: usize = 2;
+        let mut alice = State::new();
+        let mut bob = State::new();
+
+        for _ in 0..handshakes_num {
+            let h = alice.hello_propose();
+            if h.is_err() {
+                assert!(false);
+            }
+
+            let h = bob.hello_select(&h.unwrap());
+            if h.is_err() {
+                dbg!(&h);
+                assert!(false);
+            }
+
+            let c = alice.cipher_generate(&h.unwrap());
+            if c.is_err() {
+                dbg!(&c);
+                assert!(false);
+            }
+
+            let r = bob.cipher_decode_sharedkey(&c.unwrap());
+            if r.is_err() {
+                dbg!(&r);
+                assert!(false);
+            }
+
+            assert_eq!(
+                &alice.shared_key.clone().unwrap(),
+                &bob.shared_key.clone().unwrap()
+            );
+
+            alice.reset();
+            bob.reset();
+        }
+    }
 }

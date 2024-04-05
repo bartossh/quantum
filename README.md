@@ -46,7 +46,12 @@ PQC is vital for safeguarding our digital future in the age of quantum computing
 ## Dependencies
 
 1. Post quantum cryptography library used in project: [pqcrypto](https://docs.rs/pqcrypto/latest/pqcrypto/index.html).
-2. Server and client are built on top of: [actix-web](https://github.com/actix/actix-web).
+2. Elliptic curves cryptography: [Dalek klliptic curves cryptography](https://github.com/dalek-cryptography/ed25519-dalek).
+3. SHA3 algorithms [sha3](https://github.com/RustCrypto/hashes).
+4. RSA asymmetric cryptography [RSA](https://github.com/RustCrypto/RSA).
+5. Rust crypto libraries [RustCrypto](https://github.com/RustCrypto).
+6. Base 58 for public address exchange [bs58](https://github.com/Nullus157/bs58-rs)
+2. Server and client are built on top of: [Ntex](https://ntex.rs/).
 
 ## Deployment
 
