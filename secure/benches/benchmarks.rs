@@ -5,6 +5,7 @@ use secure::asymmetric_quant_cipher::*;
 use secure::asymmetric_quant_signer::*;
 use secure::globals::EncryptorDecryptor;
 use secure::globals::{AddressReader as _, EncapsulatorDecapsulator};
+use secure::handshake::*;
 use secure::randomizer;
 use secure::transaction::*;
 
@@ -152,6 +153,40 @@ fn benchmark_random_hash(c: &mut Criterion) {
     });
 }
 
+fn benchmark_handshake(c: &mut Criterion) {
+    c.bench_function("benchmark_handshake", |b| {
+        let mut alice = State::new();
+        let mut bob = State::new();
+        b.iter(|| {
+            let h = alice.hello_propose();
+            if h.is_err() {
+                assert!(false);
+            }
+
+            let h = bob.hello_select(&h.unwrap());
+            if h.is_err() {
+                dbg!(&h);
+                assert!(false);
+            }
+
+            let c = alice.cipher_generate(&h.unwrap());
+            if c.is_err() {
+                dbg!(&c);
+                assert!(false);
+            }
+
+            let r = bob.cipher_decode_sharedkey(&c.unwrap());
+            if r.is_err() {
+                dbg!(&r);
+                assert!(false);
+            }
+
+            alice.reset();
+            bob.reset();
+        });
+    });
+}
+
 criterion_group!(
     benches,
     benchmark_transaction_issue,
@@ -162,6 +197,7 @@ criterion_group!(
     benchmark_asymmetric_key_decapsulation,
     benchmark_asymmetric_key_encryption,
     benchmark_asymmetric_key_decryption,
-    benchmark_random_hash
+    benchmark_random_hash,
+    benchmark_handshake
 );
 criterion_main!(benches);
