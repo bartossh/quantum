@@ -46,7 +46,7 @@ PQC is vital for safeguarding our digital future in the age of quantum computing
 ## Dependencies
 
 1. Post quantum cryptography library used in project: [pqcrypto](https://docs.rs/pqcrypto/latest/pqcrypto/index.html).
-2. Elliptic curves cryptography: [Dalek klliptic curves cryptography](https://github.com/dalek-cryptography/ed25519-dalek).
+2. Elliptic curves cryptography: [Dalek elliptic curves cryptography](https://github.com/dalek-cryptography/ed25519-dalek).
 3. SHA3 algorithms [sha3](https://github.com/RustCrypto/hashes).
 4. RSA asymmetric cryptography [RSA](https://github.com/RustCrypto/RSA).
 5. Rust crypto libraries [RustCrypto](https://github.com/RustCrypto).
@@ -71,8 +71,16 @@ To build project use `make` command:
 
 ### Unit test
 
+1. All packages with all mods, profiled, single thread.
+
 ```sh
 cargo test --profile test -v -- --nocapture --test-threads=1
+```
+
+2. Single package, single module, profiled, single thread.
+
+```sh
+cargo test --package secure handshake -v --profile test -- --nocapture --test-threads=1
 ```
 
 ### Benchmarking

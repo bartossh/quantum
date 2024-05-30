@@ -63,9 +63,9 @@ impl SignerVerifierAddressReader for SignerWallet {}
 
 impl SignerWallet {
     #[inline]
-    pub fn new() -> SignerWallet {
+    pub fn new() -> Self {
         let (pk, sk) = keypair();
-        SignerWallet { pk, sk }
+        Self { pk, sk }
     }
 }
 
@@ -77,7 +77,7 @@ mod tests {
     }
 
     #[test]
-    fn crypto_sign() {
+    fn it_should_crypto_sign_the_data() {
         let w = SignerWallet::new();
         for i in (0..=8000).step_by(4000) {
             let mock = MockData { inner: vec![1; i] };
@@ -87,7 +87,7 @@ mod tests {
     }
 
     #[test]
-    fn crypto_validate_self() {
+    fn it_should_crypto_validate_self_data() {
         let w = SignerWallet::new();
         for i in (0..=8000).step_by(4000) {
             let mock = MockData { inner: vec![1; i] };
@@ -101,7 +101,7 @@ mod tests {
     }
 
     #[test]
-    fn crypto_validate_other() {
+    fn it_should_crypto_validate_other_data() {
         let w = SignerWallet::new();
         for i in (0..=8000).step_by(4000) {
             let mock = MockData { inner: vec![1; i] };
