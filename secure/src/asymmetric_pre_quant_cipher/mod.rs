@@ -22,12 +22,12 @@ pub struct CipherWallet {
 
 impl CipherWallet {
     #[inline]
-    pub fn new() -> Result<CipherWallet, ErrorSecure> {
+    pub fn new() -> Result<Self, ErrorSecure> {
         let mut rng = rand::thread_rng();
 
         if let Ok(private_key) = RsaPrivateKey::new(&mut rng, BITS) {
             let public_key = RsaPublicKey::from(&private_key);
-            return Ok(CipherWallet {
+            return Ok(Self {
                 pk: public_key,
                 sk: private_key,
             });
@@ -101,7 +101,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn encrypt() {
+    fn it_should_encrypt_data() {
         let encrypter = CipherWallet::new().unwrap();
         let decrypter = CipherWallet::new().unwrap();
         for i in (128..2096).step_by(64) {
@@ -115,7 +115,7 @@ mod tests {
     }
 
     #[test]
-    fn decrypt() {
+    fn it_should_decrypt_data() {
         let msg: &[u8] = "this is example message to encrypt".as_bytes();
         let encrypter = CipherWallet::new().unwrap();
         let decrypter = CipherWallet::new().unwrap();
@@ -134,7 +134,7 @@ mod tests {
     }
 
     #[test]
-    fn decrypt_bad_key() {
+    fn it_should_not_decrypt_bad_key() {
         let msg: &[u8] = "this is example message to encrypt".as_bytes();
         let encrypter = CipherWallet::new().unwrap();
         let decrypter = CipherWallet::new().unwrap();

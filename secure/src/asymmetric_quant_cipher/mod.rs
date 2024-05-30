@@ -18,9 +18,9 @@ pub struct SharedKeyGeneratorWallet {
 
 impl SharedKeyGeneratorWallet {
     #[inline]
-    pub fn new() -> SharedKeyGeneratorWallet {
+    pub fn new() -> Self {
         let (pk, sk) = keypair();
-        SharedKeyGeneratorWallet { pk, sk }
+        Self { pk, sk }
     }
 }
 
@@ -71,7 +71,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn encrypt() {
+    fn it_should_encrypt_encapsulating_shared_key() {
         let encrypter = SharedKeyGeneratorWallet::new();
         let decrypter: SharedKeyGeneratorWallet = SharedKeyGeneratorWallet::new();
         for _ in 0..5 {
@@ -84,7 +84,7 @@ mod tests {
     }
 
     #[test]
-    fn decrypt() {
+    fn it_should_decrypt_encapsulated_shared_key() {
         let encrypter = SharedKeyGeneratorWallet::new();
         let decrypter: SharedKeyGeneratorWallet = SharedKeyGeneratorWallet::new();
         for _ in 0..5 {
@@ -102,7 +102,7 @@ mod tests {
     }
 
     #[test]
-    fn decrypt_bad_key() {
+    fn it_should_not_decrypt_a_bad_key() {
         let encrypter = SharedKeyGeneratorWallet::new();
         let decrypter: SharedKeyGeneratorWallet = SharedKeyGeneratorWallet::new();
         for _ in 0..5 {

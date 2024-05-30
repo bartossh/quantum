@@ -252,7 +252,7 @@ mod tests {
     }
 
     #[test]
-    fn as_vec_bytes() {
+    fn it_should_correctly_create_transaction_as_vec_bytes() {
         let data = "pucy6qnk6pmg6ttul0hbl6xzgxh6dfjceqcs9tewxr2jjrtdhotzi1a03pvqibj2eilft8mwdlwz986/8wwci6cx1zz0ly1t+ehjn7sphpoov4u71yroln9jdevok5olzwgiy6adoxynabrumaupidkfjcbwsgalejm/y9ly/r3z1y5vou6cz/rd6v+dmpch9jjcqncaj0zp/+4pisdbwmegzwadiyfi6ignhicywtvbty4pqkcpjvebgmufilfl+uny1gjvqajac941bx5tfl+dphcuxg3ztpajdx0tfmk5vqhqvzjuo3oplpn4iqfnv7itukbdudcpcqctiyy23nzdreldzlhxr33nurhm6mx4hn2ygnk3aiam1jrnhhusiweqggbkcrqgeehv4ge/j2x8o1gfkocl+2kl+ztlhs5eiiqojypux4x8ewslspbdqb7ckskmnmemgyq0gvqh75crqduwdrs+z/jl0didrwnhbtuvak41+nhn1yejvo+qepejatanqajkw+tst4ia/3rdv46oz6dvqroowiacgpwqtebpo4fcrzc3vrz/flczk92s7kkiulr1eiomy2fybzwmlefckk1i/elinchnusffspwlhzkf/gqpyuhsf6we2yvljgztjjpfkg8wbelttaqo3d1hwkew3jehvuqwrw49lvowqgtzfj0mcuypu8qeuuckkjyu+uzd1u9+nusnznuz+jqf1wubqq1galom+tlipswle9ypbgi7krmvbch93el22oidynt+zdeikaa053jvwmren2lhj85f189ziw2wbybxk0htqgwxxw/zhzqxjhjs3pwkhrxdf/35m2fwxoefixkvdqixhqko7kwsnwmv2iumsodlb2lihbjpu6ruzeao6mqvrrrn9ljw9dudgjhs4u/odpoqobyrvxixoqw0uylnj18tossvdh0dvldayk+f9kfsevofgihhpg3qae9zwu3ixtvdv+9sv0tsyoqkbamrxfwimiqwzfznzaxpd/70rdcwpijzpv9nf9km38cdpivbr8fj0nb/jiv2wsevw0s9gfwmsfhcsqfg+jpuwr2ljmq/urtvyp9ainqc8xfcosc74iwqc7fdywni5149bybandldaq6uax75kuwmmxtpjbmgbiusf89d+njyakzdz/n6dqfjun7rlbrfmlczjem24imhqmd94pzyhvw66flub/g4e+u/wka7xwwawpmxlh3xed1cyvhiyqodp7ydk4blwylczd5ufb7pqrp7idnro8srp7p+qusrowqsu9br7suubreyyzdhntja7eqmcdwvxae32/b1tbtqxy2jovqepo1eeg/sb3nl1hlrefcy0aeysvkxo4akicigw36bthjkq5rauv6136tcvma+u/ey4doeoiyduj+zhlkwnlwz97sz6xd8s3pgyecvkpnnzph77bz5tqp6iidk/b8yyf6purwakmg24l65lnorusekjwpnnajuhjdt2tqypejnkx5yxwi/gvbdrgpchp6r6fooufhoeurxljhanhb3cdyffmg6ncvz8h/e+twizlobs3wilyi/wq4tupo7tbdhjlfquiwabunbcpxkiyheejqdqbonclb8bkaof01uspzkjhnzfhvv/ghzozjjevnlivmbi2untllwcundl8lxhyg2/kdgtum2jjsqgmxmycdbc7cythanmfoci7rbqf+hrfpvazgwyxixbe3dzcpsy/917utn6f7wuiazlg/0geot8aa6urgru+309hpd0mxqo1voi/d/8aoizcmld5ioqokryxiufz6hkqs4xxjv98n/jgjvtck26bnibqmapigzmafkxauswh23wvqbnzyz3h3yrz2g6gcv12urg4olm1h5lhxvehklcwgtxznndq7iexqey9quaymgcy1zojjhtqogynj9lwjmwv1tdcaqwnw/osconakide7inqs6rd2qg4dfudkztvpe31ekaefoicyuxee7gxwybzchc/1g+jj0wjatly82k/+/kj/k5+7ympirtd2mcunjg+gpnxygxhl+m5w8rizjcb/lp0kuoyvrjsrardyabthb4emvfgn0m7tebx3dautu+viwfymgbng64vqxqkrf4icu1ckuhzahlw17xjpzcmtyafe1yoechwgb4+xps/tcktft1u30wema5uoajtrrsuuqo6x7/vdsrw2/o+xezgtooxfooq3xqo9m88qyzdnk39yo7+e8owx5vwqi2xwvezm5avq1/yic72rsj37v9z/gojowpdfaivjzgdzxr7csxnywkgptq3jlx6cb10q9an5etrw2t4zodft5ggair6yvakv62r5e41ldcxhr1v6jljgyrh6hegdigpu7baa1kxu4efxz2vwitznwxhn3fginowqy2sdtnxbxx9/z8ixtnvdsddlr2gmaenu9a93e0da8xyokfzo1g0zsdpxqbzq47egbkl49srrvat9nc7uckqycemmgsyhvgo8n9qtxhduuzmfviiesshtuxfwkbky2eko/fwbzrukd1vbbe9ajo30ygfkwrlowzyw+r9z16vuqckavaln2tbzmeff3z06f2+aflar7ildq7p0mvvy+gwkje5f2gaa0ahczyhmffp6yzmokljrnto6x6gbjmviyp21fcjphlyiskodrwcvvqdaa/tegvqqwuqqwur9aes/ahpzsjutsybc+nreg18rvc41j1alcebjiridbjj1p3g4f4nw6/ldcp4rajmj+xd1cogxpqooisnoca6yys42sjojd8jwsqshb8got9s38sa73e8xn50yxdo7gzxbiroru64z9a7qvsesx6kulls6tercoi8sjckhggxnjag5lrhkx2vmmzqaca1gppybcylem3tn0btkgln/vuzjr0fl7pwxphwjcn7jxpqcqr5wbhm8dvc0csod7ush3de89qwr4wbawvkx0jp5wryw9+e8nj9pm35twuvi1r14wwhzrsmjyezg4za2xjsn8lmy/+/j13iigpcnbtemjy376uz76bhtirqntzjvjcjhzxb2czuzc2fqr4ncypodztcndybh+xoew/wxstrlbu31bke2vbybcidfxkx/iioqlx8f+yooe5xv8qb1miwckokpywbaqcri5hmq7wwes2fhijf4ls8ex02psfkk5yct8we1r5a9mmbmqx43acpxcd5gboguyfzrvyxfmyxftf4hnsiljhxv7owawheoyiokxkmot/sg99fqc10jo9/wfktmgwmz7l9rh+ocshflmfh1yqjq1cfbsz0yz6w+xapt7za3ekcuzyvwj/f2g4o1vi5l2ymhbg/tt68lzmmjidbfbo431rndujfwnungyne2bbrf/cj9njopno6wzonbla4fcfzhwbgtilc81zroqimvbynb1szdgqbkkltuvzc1msdexngcluir5l6ggo8ncsrgfzprxhtjz6ryh1b3prgr/sf0vuk0rqz+/zduu6ory0sdhwmnfimmcczrmfkpucsnxihbd1vxoyicmmhhedmnayvpbf88p3wpiu22ob0xf2en3rslpndlg2ajid3mzegoggtyvrxtraxk8mrqwuofmgatvbvz4tiaf1vl4yhkabicfhuy4fc+ej1edszvfzpehuly7/lrd0glr+xnppghdljdurus7apozk3ubfllomlbwcbfokkdywmxrftxn4mlppc9jexaxb38ltonae/brrnw589t+h42jzrxfejzafbg7ovt95vjfkjlr5lm5diextgtvvjaglh3fe+mitqnvyakt5+hkkplo4+symms6mvgpxzq4rbrdlsu3pisozfyye/qnlj0vmtjgzd5k5mjndrspar/1pyjr7pic+fdioldlpp9egpleb7vyyas8mj8ckly4gxpjhw334tqfx+ayebkundlwpof97ahuwqzhjqjf4qca1unopey4ldx+posdhdcggnueyxhwtzvxglqfh2ltetsiht1n7c2mb6zyucenhhkshmtmdftasrw9ij0bjwazexs0rqst2czdp7au8x5i8jyziyqnkfterolil43rpw/zqou+stndrqgss77hpbousjs9findv6hhyzulrjdhkciznthxvxk506qkvffet6t24qn+ulsermisb5f344skr+sl2dslaelthmgbulsag9fqpc5q4/pizlbrje0dff+hoxptf9ae6xsqx3/25kj/yepc/5qndn6iyvruhy+ransywrhgspfwi13qmf0dcjsskdknunvaooge3j75rekz2pqjf3guokkl/igurnsh7jpnobptwl+i9b1to18dpzszuxv/3i73naihlra19svs3igshhbvmob5l5thhibg0utrkialygpfrurqn4ngnt5tqjem2uvcbw+lboiqfyxmicegemtgxg1l5szcrevjx/3iikr5esfjdmmiijz5s0llpvo8ikg3sqiicixj+z6hcwituk49/cczzytwmddgvybj5p7r/d1p0fifonv/zsj3k/sdtihuknc0vfiwvk6glqbemkn/lq82iayitcrcsn+kmi1jzip7fdwn+kokvxmiu9z0dbz9nir6eatu1pgoi6v0mqqgtdfovk3demkdmkhk6d1uh4tu7zl1g5uj93t0gjnin30dy4hnal8otijeq0ocfmrid/ggsjhjofduwkgegj/d+cdyaybanq6hdlo7mg2f6jh4ye0p3edingvvbqdnipsaeiu6r9sikvaprkgmckue8jieriyxarbwi9i4s4lbgeauugdvvcc3xg6an8oubvatciqawx4ailzcow0tevxvwtywgu33hexecovbvzqpr4bh3xynt/hkucn0yqqhoakptipblx6me97rhryq3bb437aejeamhb7xgxkz8ad54dgq3jivdphwk4tt7njvqwaiugdqvjbirsrrrwbsx68wbbk0ls6zwhhzg0ixsad20ky68z7o5fthbx1dlpbrdgmbc+1t1uy79s1bleewcyjypgqqpe+bap0hd1xwlfeiuhvru7yyscyagpnvvzoxymjjvdtt8kdjpqxxdvyofj38xqp78jjkpcp9jew23ybre4/kp6zmmleqoocs1lqfxxaj7mgsiqjnbkeeteslgi/xck91enewfg2krrjezpdr+lyduabtcxpqmp+duxywsyoksw3dzbx5u0x4uplp8t0kbv6pb+sxmphhzyypkkz9/itwqlugtyrc7tt8/wj4revhrikdtnbzgbyynyp8kinn7fm8djhxitav79atuhr1j2fp+2adw6yk2qrno6h2levvdvcps49mavrzh7ridimvieodl8lvz2rbjpvxjcaghbpn3ifxczrnsdvd/lz6amiggedklsxjwzlk9yg2cmi//xjbhl0iw5a1xla2yqzanq==".to_string().as_bytes().to_vec();
         let s = SignerMock {};
         let trx = Transaction::issue(
@@ -270,7 +270,7 @@ mod tests {
     }
 
     #[test]
-    fn issue() {
+    fn it_should_issue_the_transaction() {
         let q_issuer: SignerWallet = SignerWallet::new();
         let issuer: PreQuantSignerWallet = PreQuantSignerWallet::new();
         let q_receiver: SignerWallet = SignerWallet::new();
@@ -294,7 +294,7 @@ mod tests {
     }
 
     #[test]
-    fn approve() {
+    fn it_should_approve_the_transaction() {
         let q_issuer: SignerWallet = SignerWallet::new();
         let issuer: PreQuantSignerWallet = PreQuantSignerWallet::new();
         let q_receiver: SignerWallet = SignerWallet::new();
@@ -319,7 +319,7 @@ mod tests {
     }
 
     #[test]
-    fn validate_for_issuer() {
+    fn it_should_validate_transaction_for_issuer() {
         let q_issuer: SignerWallet = SignerWallet::new();
         let issuer: PreQuantSignerWallet = PreQuantSignerWallet::new();
         let q_receiver: SignerWallet = SignerWallet::new();
@@ -344,7 +344,7 @@ mod tests {
     }
 
     #[test]
-    fn validate_for_receiver() {
+    fn it_should_validate_transaction_for_receiver() {
         let q_issuer: SignerWallet = SignerWallet::new();
         let issuer: PreQuantSignerWallet = PreQuantSignerWallet::new();
         let q_receiver: SignerWallet = SignerWallet::new();
@@ -375,7 +375,7 @@ mod tests {
     }
 
     #[test]
-    fn validate_for_wrong_issuer() {
+    fn it_should_not_validate_transaction_for_wrong_issuer() {
         let q_issuer: SignerWallet = SignerWallet::new();
         let issuer: PreQuantSignerWallet = PreQuantSignerWallet::new();
         let q_receiver: SignerWallet = SignerWallet::new();
@@ -407,7 +407,7 @@ mod tests {
     }
 
     #[test]
-    fn validate_for_wrong_receiver() {
+    fn it_should_not_validate_transaction_for_wrong_receiver() {
         let q_issuer: SignerWallet = SignerWallet::new();
         let issuer: PreQuantSignerWallet = PreQuantSignerWallet::new();
         let q_receiver: SignerWallet = SignerWallet::new();
@@ -438,7 +438,7 @@ mod tests {
     }
 
     #[test]
-    fn validate_for_altered_data() {
+    fn it_should_not_validate_transaction_for_altered_data() {
         let q_issuer: SignerWallet = SignerWallet::new();
         let issuer: PreQuantSignerWallet = PreQuantSignerWallet::new();
         let q_receiver: SignerWallet = SignerWallet::new();
@@ -479,7 +479,7 @@ mod tests {
     }
 
     #[test]
-    fn validate_for_altered_zero_data() {
+    fn it_should_not_validate_transaction_for_zeroed_data() {
         let q_issuer: SignerWallet = SignerWallet::new();
         let issuer: PreQuantSignerWallet = PreQuantSignerWallet::new();
         let q_receiver: SignerWallet = SignerWallet::new();
@@ -511,7 +511,7 @@ mod tests {
     }
 
     #[test]
-    fn validate_for_altered_subject() {
+    fn it_should_not_validate_transaction_for_altered_subject() {
         let q_issuer: SignerWallet = SignerWallet::new();
         let issuer: PreQuantSignerWallet = PreQuantSignerWallet::new();
         let q_receiver: SignerWallet = SignerWallet::new();
@@ -543,7 +543,7 @@ mod tests {
     }
 
     #[test]
-    fn validate_for_altered_time() {
+    fn it_should_not_validate_transaction_for_altered_time() {
         let q_issuer: SignerWallet = SignerWallet::new();
         let issuer: PreQuantSignerWallet = PreQuantSignerWallet::new();
         let q_receiver: SignerWallet = SignerWallet::new();

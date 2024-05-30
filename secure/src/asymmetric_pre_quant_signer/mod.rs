@@ -29,10 +29,10 @@ pub struct SignerWallet {
 
 impl SignerWallet {
     #[inline]
-    pub fn new() -> SignerWallet {
+    pub fn new() -> Self {
         let mut csprng = OsRng;
         let signing_key: SigningKey = SigningKey::generate(&mut csprng);
-        SignerWallet { signing_key }
+        Self { signing_key }
     }
 }
 
@@ -115,7 +115,7 @@ mod tests {
     }
 
     #[test]
-    fn crypto_sign() {
+    fn it_should_crypto_sign_data() {
         let w = SignerWallet::new();
         for i in (0..=8000).step_by(4000) {
             let mock = MockData { inner: vec![1; i] };
@@ -125,7 +125,7 @@ mod tests {
     }
 
     #[test]
-    fn crypto_validate_self() {
+    fn it_should_crypto_validate_self_data() {
         let w = SignerWallet::new();
         for i in (0..=8000).step_by(4000) {
             let mock = MockData { inner: vec![1; i] };
@@ -139,7 +139,7 @@ mod tests {
     }
 
     #[test]
-    fn crypto_validate_other() {
+    fn it_should_crypto_validate_other_data() {
         let w = SignerWallet::new();
         for i in (0..=8000).step_by(4000) {
             let mock = MockData { inner: vec![1; i] };

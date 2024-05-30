@@ -1,6 +1,6 @@
 mod secret;
 use crate::globals::{AsVectorBytes, ErrorSecure};
-use crate::randomizer::random_hash;
+use crate::randomizer::generate_random_hash;
 use enum_iterator::all;
 use serde::{Deserialize, Serialize};
 use std::result::Result;
@@ -216,8 +216,8 @@ pub struct Hello {
 }
 
 impl Hello {
-    fn new_request(id: [u8; 32]) -> Hello {
-        Hello {
+    fn new_request(id: [u8; 32]) -> Self {
+        Self {
             id,
             version: VERSION.to_string(),
             sign_address: None,
@@ -243,8 +243,8 @@ impl Hello {
         cipher_suits: secret::CipherSuite,
         q_sign_suits: secret::QSignerSuite,
         q_cipher_suits: secret::QCipherSuite,
-    ) -> Hello {
-        Hello {
+    ) -> Self {
+        Self {
             id,
             sign_address: Some(sign_address),
             q_sign_address: Some(q_sign_address),
@@ -416,8 +416,8 @@ pub struct State {
 impl State {
     /// Creates new Assignation entity with empty Cipher Suits.
     ///
-    pub fn new() -> State {
-        State {
+    pub fn new() -> Self {
+        Self {
             id: None,
             position: Position::Reset,
             cipher_creator: None,
@@ -444,7 +444,7 @@ impl State {
             return Err(ErrorSecure::StateNotReset);
         }
 
-        let id_slice = random_hash();
+        let id_slice = generate_random_hash();
         if id_slice.len() != 32 {
             return Err(ErrorSecure::UnexpectedFailure);
         }
@@ -540,8 +540,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn full_successful_handshake() {
-        let handshakes_num: usize = 2;
+    fn it_should_perform_full_successful_handshake() {
+        let handshakes_num: usize = 5;
         let mut alice = State::new();
         let mut bob = State::new();
 
@@ -576,6 +576,163 @@ mod tests {
 
             alice.reset();
             bob.reset();
+        }
+    }
+
+    #[test]
+    fn it_should_not_allow_to_perform_full_successful_handshake_with_mitm_attack_on_hello_select() {
+        let handshakes_num: usize = 5;
+        let mut alice = State::new();
+        let mut bob = State::new();
+        let mut clint = State::new();
+
+        for _ in 0..handshakes_num {
+            let h = alice.hello_propose();
+            if h.is_err() {
+                assert!(false);
+            }
+
+            let bh = bob.hello_select(&h.as_ref().unwrap());
+            if bh.is_err() {
+                dbg!(&bh);
+                assert!(false);
+            }
+
+            let ch = clint.hello_select(&h.unwrap());
+            if ch.is_err() {
+                dbg!(&ch);
+                assert!(false);
+            }
+
+            let c = alice.cipher_generate(&ch.unwrap());
+            if c.is_err() {
+                dbg!(&c);
+                assert!(false);
+            }
+
+            let r = bob.cipher_decode_sharedkey(&c.unwrap());
+            match r {
+                Ok(o) => {
+                    dbg!(&o);
+                    assert!(false);
+                }
+                Err(e) => {
+                    if e != ErrorSecure::InvalidHash {
+                        dbg!(&e);
+                        assert!(false);
+                    }
+                }
+            }
+            alice.reset();
+            bob.reset();
+            clint.reset();
+        }
+    }
+
+    #[test]
+    fn it_should_not_allow_to_perform_full_successful_handshake_with_mitm_attack_on_cipher_generate(
+    ) {
+        let handshakes_num: usize = 5;
+        let mut alice = State::new();
+        let mut bob = State::new();
+        let mut clint = State::new();
+
+        for _ in 0..handshakes_num {
+            let h = alice.hello_propose();
+            if h.is_err() {
+                assert!(false);
+            }
+
+            let bh = bob.hello_select(&h.as_ref().unwrap());
+            if bh.is_err() {
+                dbg!(&bh);
+                assert!(false);
+            }
+
+            let ch = clint.hello_select(&h.as_ref().unwrap());
+            if ch.is_err() {
+                dbg!(&ch);
+                assert!(false);
+            }
+
+            let ca = alice.cipher_generate(&bh.as_ref().unwrap());
+            if ca.is_err() {
+                dbg!(&ca);
+                assert!(false);
+            }
+
+            let cc = clint.cipher_generate(&bh.unwrap());
+            if cc.is_err() {
+                dbg!(&cc);
+                assert!(false);
+            }
+
+            let r = bob.cipher_decode_sharedkey(&cc.unwrap());
+            match r {
+                Ok(o) => {
+                    dbg!(&o);
+                    assert!(false);
+                }
+                Err(e) => {
+                    if e != ErrorSecure::InvalidHash {
+                        dbg!(&e);
+                        assert!(false);
+                    }
+                }
+            }
+            alice.reset();
+            bob.reset();
+            clint.reset();
+        }
+    }
+
+    #[test]
+    fn it_should_not_allow_to_perform_full_successful_handshake_with_mitm_attack_on_hello_propose()
+    {
+        let handshakes_num: usize = 5;
+        let mut alice = State::new();
+        let mut bob = State::new();
+        let mut clint = State::new();
+
+        for _ in 0..handshakes_num {
+            let h = alice.hello_propose();
+            if h.is_err() {
+                assert!(false);
+            }
+
+            let ch = clint.hello_propose();
+            if ch.is_err() {
+                assert!(false);
+            }
+
+            let bh = bob.hello_select(&ch.as_ref().unwrap());
+            if bh.is_err() {
+                dbg!(&bh);
+                assert!(false);
+            }
+
+            let ca = alice.cipher_generate(&bh.as_ref().unwrap());
+            if ca.is_err() {
+                dbg!(&ca);
+                assert!(false);
+            }
+
+            let r = bob.cipher_decode_sharedkey(&ca.unwrap());
+            match r {
+                Ok(o) => {
+                    dbg!(&o);
+                    assert!(false);
+                }
+                Err(e) => {
+                    if e != ErrorSecure::InvalidHash {
+                        dbg!(&e);
+                        assert!(false);
+                    }
+                }
+            }
+            alice.reset();
+            bob.reset();
+            clint.reset();
         }
     }
 }

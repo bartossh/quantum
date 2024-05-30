@@ -13,7 +13,7 @@ pub trait AddressReader {
 
 /// Errors describing EncapsulatorDecapsulator failures.
 ///
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ErrorSecure {
     InvalidPublicKey,
     InvalidSignature,

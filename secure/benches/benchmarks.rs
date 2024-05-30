@@ -149,7 +149,7 @@ fn benchmark_asymmetric_key_decryption(c: &mut Criterion) {
 
 fn benchmark_random_hash(c: &mut Criterion) {
     c.bench_function("benchmark_random_hash", |b| {
-        b.iter(|| randomizer::random_hash());
+        b.iter(|| randomizer::generate_random_hash());
     });
 }
 
