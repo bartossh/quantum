@@ -28,6 +28,7 @@ pub enum ErrorSecure {
     SelectedEncapsulatorDoesNotExist,
     StateNotReset,
     StateNotHello,
+    StateNotSharedKey,
     WrongIdPresented,
 }
 

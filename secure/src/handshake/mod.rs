@@ -526,12 +526,22 @@ impl State {
         if self.position != Position::Hello {
             return Err(ErrorSecure::StateNotHello);
         }
-        if let Some(ck) = &mut self.cipher_creator {
-            self.shared_key = Some(ck.unpack_from_cipher(&cipher, &self.handshake_data)?);
-            return Ok(());
-        }
+        let Some(ck) = &mut self.cipher_creator else {
+            return Err(ErrorSecure::NoCipherCreator);
+        };
+        self.position = Position::SharedKey;
+        self.shared_key = Some(ck.unpack_from_cipher(&cipher, &self.handshake_data)?);
+        Ok(())
+    }
 
-        Err(ErrorSecure::NoCipherCreator)
+    pub fn get_shared_key(&self) -> Result<Vec<u8>, ErrorSecure> {
+        if self.position != Position::SharedKey {
+            return Err(ErrorSecure::StateNotSharedKey);
+        }
+        match self.shared_key.as_ref() {
+            None => return Err(ErrorSecure::StateNotSharedKey),
+            Some(sk) => Ok(sk.clone()),
+        }
     }
 }
 
@@ -548,6 +558,7 @@ mod tests {
         for _ in 0..handshakes_num {
             let h = alice.hello_propose();
             if h.is_err() {
+                dbg!(&h);
                 assert!(false);
             }
 
@@ -580,6 +591,96 @@ mod tests {
     }
 
     #[test]
+    fn it_should_perform_full_successful_handshake_and_get_the_key() {
+        let handshakes_num: usize = 5;
+        let mut alice = State::new();
+        let mut bob = State::new();
+
+        for _ in 0..handshakes_num {
+            let h = alice.hello_propose();
+            if h.is_err() {
+                dbg!(&h);
+                assert!(false);
+            }
+
+            let h = bob.hello_select(&h.unwrap());
+            if h.is_err() {
+                dbg!(&h);
+                assert!(false);
+            }
+
+            let c = alice.cipher_generate(&h.unwrap());
+            if c.is_err() {
+                dbg!(&c);
+                assert!(false);
+            }
+
+            let r = bob.cipher_decode_sharedkey(&c.unwrap());
+            if r.is_err() {
+                dbg!(&r);
+                assert!(false);
+            }
+
+            assert_eq!(
+                alice.get_shared_key().unwrap(),
+                bob.get_shared_key().unwrap()
+            );
+
+            alice.reset();
+            bob.reset();
+        }
+    }
+
+    #[test]
+    fn it_should_fail_to_get_the_shared_key_before_full_handshake() {
+        let handshakes_num: usize = 5;
+        let mut alice = State::new();
+        let mut bob = State::new();
+
+        for _ in 0..handshakes_num {
+            let h = alice.hello_propose();
+            if h.is_err() {
+                dbg!(&h);
+                assert!(false);
+            }
+
+            assert_eq!(alice.get_shared_key(), Err(ErrorSecure::StateNotSharedKey));
+            assert_eq!(bob.get_shared_key(), Err(ErrorSecure::StateNotSharedKey));
+
+            let h = bob.hello_select(&h.unwrap());
+            if h.is_err() {
+                dbg!(&h);
+                assert!(false);
+            }
+
+            assert_eq!(alice.get_shared_key(), Err(ErrorSecure::StateNotSharedKey));
+            assert_eq!(bob.get_shared_key(), Err(ErrorSecure::StateNotSharedKey));
+
+            let c = alice.cipher_generate(&h.unwrap());
+            if c.is_err() {
+                dbg!(&c);
+                assert!(false);
+            }
+
+            assert_eq!(bob.get_shared_key(), Err(ErrorSecure::StateNotSharedKey));
+
+            let r = bob.cipher_decode_sharedkey(&c.unwrap());
+            if r.is_err() {
+                dbg!(&r);
+                assert!(false);
+            }
+
+            assert_eq!(
+                alice.get_shared_key().unwrap(),
+                bob.get_shared_key().unwrap()
+            );
+
+            alice.reset();
+            bob.reset();
+        }
+    }
+
+    #[test]
     fn it_should_not_allow_to_perform_full_successful_handshake_with_mitm_attack_on_hello_select() {
         let handshakes_num: usize = 5;
         let mut alice = State::new();
@@ -589,6 +690,7 @@ mod tests {
         for _ in 0..handshakes_num {
             let h = alice.hello_propose();
             if h.is_err() {
+                dbg!(&h);
                 assert!(false);
             }
 
@@ -640,6 +742,7 @@ mod tests {
         for _ in 0..handshakes_num {
             let h = alice.hello_propose();
             if h.is_err() {
+                dbg!(&h);
                 assert!(false);
             }
 
@@ -697,11 +800,13 @@ mod tests {
         for _ in 0..handshakes_num {
             let h = alice.hello_propose();
             if h.is_err() {
+                dbg!(&h);
                 assert!(false);
             }
 
             let ch = clint.hello_propose();
             if ch.is_err() {
+                dbg!(&h);
                 assert!(false);
             }
 
