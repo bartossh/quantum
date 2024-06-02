@@ -56,10 +56,10 @@ pub trait Verifier {
 ///
 pub trait SignerVerifierAddressReader: Signer + Verifier + AddressReader {}
 
-/// EncapsulatorDecapsulator generates shared key and encapsulates the shared key
+/// AsymmetricEncapsulatorDecapsulator generates shared key and encapsulates the shared key
 /// and decapsulates shared key using post-quantum asymmetric key cryptography.
 ///
-pub trait EncapsulatorDecapsulator {
+pub trait AsymmetricEncapsulatorDecapsulator {
     /// Encapsulated generated shared secret key as raw vector of bytes and the ciphertext.
     /// First entity in the Result success tuple is SecretKey and Second one is Ciphertext.
     /// # Examples
@@ -72,12 +72,15 @@ pub trait EncapsulatorDecapsulator {
     fn decapsulate_shared_key(&self, cipher: &[u8]) -> Result<Vec<u8>, ErrorSecure>;
 }
 
-/// EncapsulatorDecapsulatorAddressReader combines EncapsulatorDecapsulator and AddressReader traits.
+/// AsymmetricEncapsulatorDecapsulatorAddressReader combines AsymmetricEncapsulatorDecapsulator and AddressReader traits.
 ///
-pub trait EncapsulatorDecapsulatorAddressReader: EncapsulatorDecapsulator + AddressReader {}
+pub trait AsymmetricEncapsulatorDecapsulatorAddressReader:
+    AsymmetricEncapsulatorDecapsulator + AddressReader
+{
+}
 
-/// EncryptorDecryptor encrypts and decrypts message using asymmetric key cryptography.
-pub trait EncryptorDecryptor {
+/// AsymmetricEncryptorDecryptor encrypts and decrypts message using asymmetric key cryptography.
+pub trait AsymmetricEncryptorDecryptor {
     /// Encrypts the message for given public address.
     ///
     fn encrypt(&self, address: String, msg: &[u8]) -> Result<Vec<u8>, ErrorSecure>;
@@ -87,9 +90,12 @@ pub trait EncryptorDecryptor {
     fn decrypt(&self, msg: &[u8]) -> Result<Vec<u8>, ErrorSecure>;
 }
 
-/// EncryptorDecryptor combines EncryptorDecryptor and AddressReader traits.
+/// AsymmetricEncryptorDecryptorAddressReader combines AsymmetricEncryptorDecryptor and AddressReader traits.
 ///
-pub trait EncryptorDecryptorAddressReader: EncryptorDecryptor + AddressReader {}
+pub trait AsymmetricEncryptorDecryptorAddressReader:
+    AsymmetricEncryptorDecryptor + AddressReader
+{
+}
 
 /// Hasher hashes the given slice of bytes.
 ///
@@ -105,4 +111,15 @@ pub trait Hasher {
     /// Hashes given slice and resets the hasher, returns digested vector.
     ///
     fn hash_reset(&mut self, slice: &[u8]) -> Vec<u8>;
+}
+
+/// SymmetricEncryptorDecryptor encrypts message to cipher and decrypts cipher to message.
+///
+pub trait SymmetricEncryptorDecryptor {
+    /// Encrypts the message returning the tuple (cipher, nonce and padding) if success or error otherwise.
+    ///
+    fn encrypt(&self, message: &[u8]) -> Result<(Vec<u8>, Vec<u8>, usize), ErrorSecure>;
+    /// Decrypts returns the plain buffer. Arguments are message and nonce.
+    ///
+    fn decrypt(&self, cipher: &[u8], nonce: &[u8; 32]) -> Vec<u8>;
 }

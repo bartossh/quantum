@@ -1,5 +1,5 @@
-use crate::globals::{AddressReader, EncapsulatorDecapsulatorAddressReader};
-use crate::globals::{EncapsulatorDecapsulator, ErrorSecure};
+use crate::globals::{AddressReader, AsymmetricEncapsulatorDecapsulatorAddressReader};
+use crate::globals::{AsymmetricEncapsulatorDecapsulator, ErrorSecure};
 use pqcrypto::kem::kyber1024::{
     decapsulate, encapsulate, keypair, Ciphertext, PublicKey, SecretKey,
 };
@@ -24,7 +24,7 @@ impl SharedKeyGeneratorWallet {
     }
 }
 
-impl EncapsulatorDecapsulator for SharedKeyGeneratorWallet {
+impl AsymmetricEncapsulatorDecapsulator for SharedKeyGeneratorWallet {
     fn encapsulate_shared_key(&self, address: String) -> Result<(Vec<u8>, Vec<u8>), ErrorSecure> {
         if let Ok(decoded) = bs58::decode(address).into_vec() {
             if !decoded[0..2].eq(VERSION) {
@@ -64,7 +64,7 @@ impl AddressReader for SharedKeyGeneratorWallet {
     }
 }
 
-impl EncapsulatorDecapsulatorAddressReader for SharedKeyGeneratorWallet {}
+impl AsymmetricEncapsulatorDecapsulatorAddressReader for SharedKeyGeneratorWallet {}
 
 #[cfg(test)]
 mod tests {
