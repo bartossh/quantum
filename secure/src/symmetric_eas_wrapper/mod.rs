@@ -92,7 +92,10 @@ mod tests {
     #[test]
     fn it_should_encrypt_data_of_any_size_successfully() {
         for extended in 0..=16 {
-            let message: Vec<u8> = vec![123; 16 * 100 + extended];
+            let mut message: Vec<u8> = vec![0; 16 * 100 + extended];
+            for v in message.iter_mut() {
+                *v = thread_rng().gen_range(0..225);
+            }
             let key = b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F";
             let security = SymmetricSecurity::from(key);
             let Ok((cipher, nonce, padding)) = security.encrypt(&message) else {
@@ -122,7 +125,10 @@ mod tests {
     #[test]
     fn it_should_encrypt_decrypt_data_of_any_size_successfully() {
         for extended in 0..=16 {
-            let message: Vec<u8> = vec![123; 16 * 100 + extended];
+            let mut message: Vec<u8> = vec![0; 16 * 100 + extended];
+            for v in message.iter_mut() {
+                *v = thread_rng().gen_range(0..225);
+            }
             let key = b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F";
             let security = SymmetricSecurity::from(key);
             let Ok((cipher, nonce, padding)) = security.encrypt(&message) else {
@@ -156,7 +162,10 @@ mod tests {
     #[test]
     fn it_should_encrypt_and_not_decrypt_altered_data() {
         for extended in 0..=16 {
-            let message: Vec<u8> = vec![123; 16 * 100 + extended];
+            let mut message: Vec<u8> = vec![0; 16 * 100 + extended];
+            for v in message.iter_mut() {
+                *v = thread_rng().gen_range(0..225);
+            }
             let key = b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F";
             let security = SymmetricSecurity::from(key);
             let Ok((mut cipher, nonce, padding)) = security.encrypt(&message) else {
