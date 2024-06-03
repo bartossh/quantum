@@ -2,7 +2,6 @@ use crate::globals::{ErrorSecure, SymmetricEncryptorDecryptor};
 use openssl::aes::{aes_ige, AesKey};
 use openssl::rand::rand_bytes;
 use openssl::symm::Mode;
-use std::ascii::AsciiExt;
 use std::convert::From;
 
 const CHUNK_SIZE: usize = 16;
