@@ -65,7 +65,7 @@ impl SymmetricEncryptorDecryptor for SymmetricSecurity {
             Mode::Encrypt,
         );
 
-        return Ok((cipher, nonce, if rest == 0 { 0 } else { CHUNK_SIZE - rest }));
+        Ok((cipher, nonce, if rest == 0 { 0 } else { CHUNK_SIZE - rest }))
     }
 
     fn decrypt(&self, cipher: &[u8], nonce: &[u8; 32], padding: usize) -> Vec<u8> {
