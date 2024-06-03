@@ -2,6 +2,7 @@ use crate::globals::{ErrorSecure, SymmetricEncryptorDecryptor};
 use openssl::aes::{aes_ige, AesKey};
 use openssl::rand::rand_bytes;
 use openssl::symm::Mode;
+use std::ascii::AsciiExt;
 use std::convert::From;
 
 const CHUNK_SIZE: usize = 16;
@@ -39,13 +40,13 @@ impl From<&[u8; 32]> for SymmetricSecurity {
 }
 
 impl SymmetricEncryptorDecryptor for SymmetricSecurity {
-    fn encrypt(&self, message: &[u8]) -> Result<(Vec<u8>, Vec<u8>, usize), ErrorSecure> {
+    fn encrypt(&self, message: &[u8]) -> Result<(Vec<u8>, [u8; 32], usize), ErrorSecure> {
         let rest = message.len() % CHUNK_SIZE;
         let message = match rest {
             0 => message.to_vec(),
             _ => {
                 let mut extended: Vec<u8> = Vec::with_capacity(message.len() + CHUNK_SIZE - rest);
-                extended.extend_from_slice(message);
+                extended.extend(message);
                 extended.extend(vec![0; CHUNK_SIZE - rest]);
 
                 extended
@@ -61,18 +62,14 @@ impl SymmetricEncryptorDecryptor for SymmetricSecurity {
             &message,
             &mut cipher,
             &self.encrypt,
-            &mut nonce,
+            &mut nonce.clone(),
             Mode::Encrypt,
         );
 
-        return Ok((
-            cipher,
-            nonce.to_vec(),
-            if rest == 0 { 0 } else { CHUNK_SIZE - rest },
-        ));
+        return Ok((cipher, nonce, if rest == 0 { 0 } else { CHUNK_SIZE - rest }));
     }
 
-    fn decrypt(&self, cipher: &[u8], nonce: &[u8; 32]) -> Vec<u8> {
+    fn decrypt(&self, cipher: &[u8], nonce: &[u8; 32], padding: usize) -> Vec<u8> {
         let mut message: Vec<u8> = vec![0; cipher.len()];
         aes_ige(
             &cipher,
@@ -82,26 +79,118 @@ impl SymmetricEncryptorDecryptor for SymmetricSecurity {
             Mode::Decrypt,
         );
 
-        message
+        message[..cipher.len() - padding].to_vec()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::{thread_rng, Rng};
     use std::convert::From;
 
     #[test]
-    fn it_should_encrypt_data_of_chunk_size_multiple() {
-        let message: Vec<u8> = vec![123; 16 * 100];
-        let key = b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F";
-        let security = SymmetricSecurity::from(key);
-        let Ok((cipher, nonce, usize)) = security.encrypt(&message) else {
-            assert!(false);
-            return;
-        };
-        assert_eq!(cipher.len(), message.len());
-        assert_eq!(nonce.len(), 32);
-        assert_eq!(usize, 0);
+    fn it_should_encrypt_data_of_any_size_successfully() {
+        for extended in 0..=16 {
+            let message: Vec<u8> = vec![123; 16 * 100 + extended];
+            let key = b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F";
+            let security = SymmetricSecurity::from(key);
+            let Ok((cipher, nonce, padding)) = security.encrypt(&message) else {
+                assert!(false);
+                return;
+            };
+            assert_eq!(
+                cipher.len(),
+                if padding == 0 {
+                    message.len()
+                } else {
+                    message.len() - extended + CHUNK_SIZE
+                }
+            );
+            assert_eq!(nonce.len(), 32);
+            assert_eq!(
+                padding,
+                if extended == 0 {
+                    0
+                } else {
+                    CHUNK_SIZE - extended
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn it_should_encrypt_decrypt_data_of_any_size_successfully() {
+        for extended in 0..=16 {
+            let message: Vec<u8> = vec![123; 16 * 100 + extended];
+            let key = b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F";
+            let security = SymmetricSecurity::from(key);
+            let Ok((cipher, nonce, padding)) = security.encrypt(&message) else {
+                assert!(false);
+                return;
+            };
+            assert_eq!(
+                cipher.len(),
+                if padding == 0 {
+                    message.len()
+                } else {
+                    message.len() - extended + CHUNK_SIZE
+                }
+            );
+            assert_eq!(nonce.len(), 32);
+            assert_eq!(
+                padding,
+                if extended == 0 {
+                    0
+                } else {
+                    CHUNK_SIZE - extended
+                }
+            );
+
+            let plane = security.decrypt(&cipher, &nonce, padding);
+
+            assert_eq!(message, plane);
+        }
+    }
+
+    #[test]
+    fn it_should_encrypt_and_not_decrypt_data_of_any_size_that_are_altered() {
+        for extended in 0..=16 {
+            let message: Vec<u8> = vec![123; 16 * 100 + extended];
+            let key = b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F";
+            let security = SymmetricSecurity::from(key);
+            let Ok((mut cipher, nonce, padding)) = security.encrypt(&message) else {
+                assert!(false);
+                return;
+            };
+            assert_eq!(
+                cipher.len(),
+                if padding == 0 {
+                    message.len()
+                } else {
+                    message.len() - extended + CHUNK_SIZE
+                }
+            );
+            assert_eq!(nonce.len(), 32);
+            assert_eq!(
+                padding,
+                if extended == 0 {
+                    0
+                } else {
+                    CHUNK_SIZE - extended
+                }
+            );
+
+            let idx = thread_rng().gen_range(0..cipher.len());
+            cipher[idx] = if cipher[idx] == 255 {
+                0
+            } else {
+                cipher[idx] + 1
+            };
+
+            let plane = security.decrypt(&cipher, &nonce, padding);
+
+            assert_ne!(message, plane);
+        }
     }
 }

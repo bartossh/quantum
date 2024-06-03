@@ -118,8 +118,8 @@ pub trait Hasher {
 pub trait SymmetricEncryptorDecryptor {
     /// Encrypts the message returning the tuple (cipher, nonce and padding) if success or error otherwise.
     ///
-    fn encrypt(&self, message: &[u8]) -> Result<(Vec<u8>, Vec<u8>, usize), ErrorSecure>;
+    fn encrypt(&self, message: &[u8]) -> Result<(Vec<u8>, [u8; 32], usize), ErrorSecure>;
     /// Decrypts returns the plain buffer. Arguments are message and nonce.
     ///
-    fn decrypt(&self, cipher: &[u8], nonce: &[u8; 32]) -> Vec<u8>;
+    fn decrypt(&self, cipher: &[u8], nonce: &[u8; 32], padding: usize) -> Vec<u8>;
 }
