@@ -154,7 +154,7 @@ mod tests {
     }
 
     #[test]
-    fn it_should_encrypt_and_not_decrypt_data_of_any_size_that_are_altered() {
+    fn it_should_encrypt_and_not_decrypt_altered_data() {
         for extended in 0..=16 {
             let message: Vec<u8> = vec![123; 16 * 100 + extended];
             let key = b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F";
