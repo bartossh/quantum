@@ -78,8 +78,9 @@ impl SymmetricEncryptorDecryptor for SymmetricSecurity {
             &mut nonce.to_vec(),
             Mode::Decrypt,
         );
+        message.truncate(cipher.len() - padding);
 
-        message[..cipher.len() - padding].to_vec()
+        message
     }
 }
 
