@@ -86,16 +86,15 @@ impl SymmetricEncryptorDecryptor for SymmetricSecurity {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::{thread_rng, Rng};
+    use rand::{thread_rng, Rng, RngCore};
     use std::convert::From;
 
     #[test]
     fn it_should_encrypt_data_of_any_size_successfully() {
+        let mut rng = rand::thread_rng();
         for extended in 0..=16 {
             let mut message: Vec<u8> = vec![0; 16 * 100 + extended];
-            for v in message.iter_mut() {
-                *v = thread_rng().gen_range(0..225);
-            }
+            rng.fill_bytes(&mut message);
             let key = b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F";
             let security = SymmetricSecurity::from(key);
             let Ok((cipher, nonce, padding)) = security.encrypt(&message) else {
@@ -124,11 +123,10 @@ mod tests {
 
     #[test]
     fn it_should_encrypt_decrypt_data_of_any_size_successfully() {
+        let mut rng = rand::thread_rng();
         for extended in 0..=16 {
             let mut message: Vec<u8> = vec![0; 16 * 100 + extended];
-            for v in message.iter_mut() {
-                *v = thread_rng().gen_range(0..225);
-            }
+            rng.fill_bytes(&mut message);
             let key = b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F";
             let security = SymmetricSecurity::from(key);
             let Ok((cipher, nonce, padding)) = security.encrypt(&message) else {
@@ -161,11 +159,10 @@ mod tests {
 
     #[test]
     fn it_should_encrypt_and_not_decrypt_altered_data() {
+        let mut rng = rand::thread_rng();
         for extended in 0..=16 {
             let mut message: Vec<u8> = vec![0; 16 * 100 + extended];
-            for v in message.iter_mut() {
-                *v = thread_rng().gen_range(0..225);
-            }
+            rng.fill_bytes(&mut message);
             let key = b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F";
             let security = SymmetricSecurity::from(key);
             let Ok((mut cipher, nonce, padding)) = security.encrypt(&message) else {

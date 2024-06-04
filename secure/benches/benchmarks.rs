@@ -1,6 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use rand::thread_rng;
-use rand::Rng;
+use rand::RngCore;
 use secure::asymmetric_pre_quant_cipher::CipherWallet;
 use secure::asymmetric_pre_quant_signer::SignerWallet as PreQuantSignerWallet;
 use secure::asymmetric_quant_cipher::*;
@@ -196,12 +195,12 @@ fn benchmark_symmetric_encryption(c: &mut Criterion) {
     c.bench_function(
         "benchmark_symmetric_encryption_data_size_16008_bytes",
         |b| {
+            let mut rng = rand::thread_rng();
             let mut message: Vec<u8> = vec![0; 16 * 100 + 8];
-            for v in message.iter_mut() {
-                *v = thread_rng().gen_range(0..225);
-            }
-            let key = b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F";
-            let security = SymmetricSecurity::from(key);
+            rng.fill_bytes(&mut message);
+            let mut key = [0; 16];
+            rng.fill_bytes(&mut key);
+            let security = SymmetricSecurity::from(&key);
             b.iter(|| {
                 let Ok((_cipher, _nonce, _padding)) = security.encrypt(&message) else {
                     assert!(false);
@@ -216,12 +215,12 @@ fn benchmark_symmetric_decryption(c: &mut Criterion) {
     c.bench_function(
         "benchmark_symmetric_decryption_data_size_16008_bytes",
         |b| {
+            let mut rng = rand::thread_rng();
             let mut message: Vec<u8> = vec![0; 16 * 100 + 8];
-            for v in message.iter_mut() {
-                *v = thread_rng().gen_range(0..225);
-            }
-            let key = b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F";
-            let security = SymmetricSecurity::from(key);
+            rng.fill_bytes(&mut message);
+            let mut key = [0; 16];
+            rng.fill_bytes(&mut key);
+            let security = SymmetricSecurity::from(&key);
             let Ok((cipher, nonce, padding)) = security.encrypt(&message) else {
                 assert!(false);
                 return;
