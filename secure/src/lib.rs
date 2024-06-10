@@ -6,4 +6,5 @@ pub mod globals;
 pub mod handshake;
 pub mod randomizer;
 pub mod sha3_hasher;
+pub mod symmetric_eas_wrapper;
 pub mod transaction;

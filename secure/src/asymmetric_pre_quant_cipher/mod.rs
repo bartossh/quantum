@@ -1,5 +1,5 @@
 use crate::globals::{
-    AddressReader, EncryptorDecryptor, EncryptorDecryptorAddressReader, ErrorSecure,
+    AddressReader, AsymmetricEncryptorDecryptor, AsymmetricEncryptorDecryptorAddressReader, ErrorSecure,
 };
 use rand::thread_rng;
 use rsa::{
@@ -51,7 +51,7 @@ impl AddressReader for CipherWallet {
     }
 }
 
-impl EncryptorDecryptor for CipherWallet {
+impl AsymmetricEncryptorDecryptor for CipherWallet {
     fn decrypt(&self, msg: &[u8]) -> Result<Vec<u8>, ErrorSecure> {
         let mut result: Vec<u8> = Vec::new();
         for chunk in msg.chunks(KEY_STEP) {
@@ -94,7 +94,7 @@ impl EncryptorDecryptor for CipherWallet {
     }
 }
 
-impl EncryptorDecryptorAddressReader for CipherWallet {}
+impl AsymmetricEncryptorDecryptorAddressReader for CipherWallet {}
 
 #[cfg(test)]
 mod tests {

@@ -3,15 +3,14 @@ use crate::asymmetric_pre_quant_signer::SignerWallet;
 use crate::asymmetric_quant_cipher::SharedKeyGeneratorWallet;
 use crate::asymmetric_quant_signer::SignerWallet as QSignerWallet;
 use crate::globals::{
-    EncapsulatorDecapsulatorAddressReader, EncryptorDecryptorAddressReader, ErrorSecure, Hasher,
-    SignerVerifierAddressReader,
+    AsymmetricEncapsulatorDecapsulatorAddressReader, AsymmetricEncryptorDecryptorAddressReader,
+    ErrorSecure, Hasher, SignerVerifierAddressReader,
 };
 use crate::sha3_hasher::HashSha3_512;
 use enum_iterator::Sequence;
 use serde::{Deserialize, Serialize};
 
 /// Secret key is a ciphered message established for the encryption session between E2E clients.
-/// /// All the future messages are encrypted with the SecretKey.
 ///
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Cipher {
@@ -59,8 +58,8 @@ pub struct CipherCreator {
     hasher: Box<dyn Hasher>,
     signer_verifier: Box<dyn SignerVerifierAddressReader>,
     q_signer_verifier: Box<dyn SignerVerifierAddressReader>,
-    encryptor_decryptor: Box<dyn EncryptorDecryptorAddressReader>,
-    q_encapsulator_decapsulator: Box<dyn EncapsulatorDecapsulatorAddressReader>,
+    encryptor_decryptor: Box<dyn AsymmetricEncryptorDecryptorAddressReader>,
+    q_encapsulator_decapsulator: Box<dyn AsymmetricEncapsulatorDecapsulatorAddressReader>,
 }
 
 impl CipherCreator {
@@ -169,7 +168,9 @@ fn create_q_signer(s: QSignerSuite) -> Box<impl SignerVerifierAddressReader> {
     }
 }
 
-fn create_cipher(c: CipherSuite) -> Result<Box<impl EncryptorDecryptorAddressReader>, ErrorSecure> {
+fn create_cipher(
+    c: CipherSuite,
+) -> Result<Box<impl AsymmetricEncryptorDecryptorAddressReader>, ErrorSecure> {
     match c {
         CipherSuite::RSA2048 => match CipherWallet::new() {
             Ok(cw) => Ok(Box::new(cw)),
@@ -178,7 +179,7 @@ fn create_cipher(c: CipherSuite) -> Result<Box<impl EncryptorDecryptorAddressRea
     }
 }
 
-fn create_q_cipher(c: QCipherSuite) -> Box<impl EncapsulatorDecapsulatorAddressReader> {
+fn create_q_cipher(c: QCipherSuite) -> Box<impl AsymmetricEncapsulatorDecapsulatorAddressReader> {
     match c {
         QCipherSuite::KYBER1024 => Box::new(SharedKeyGeneratorWallet::new()),
     }
